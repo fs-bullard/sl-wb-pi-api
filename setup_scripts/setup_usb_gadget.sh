@@ -70,17 +70,28 @@ fi
 echo ""
 echo "Step 2: Configuring network interface..."
 
-# 3. Configure static IP on usb0 interface
-INTERFACES_FILE="/etc/network/interfaces.d/usb0"
-cat > "$INTERFACES_FILE" <<EOF
-# USB Gadget Networking Interface
-allow-hotplug usb0
-iface usb0 inet static
-    address 192.168.7.2
-    netmask 255.255.255.0
-EOF
+# 3. Configure static IP on usb0 interface using dhcpcd
+# Modern Pi OS uses dhcpcd instead of /etc/network/interfaces
+DHCPCD_FILE="/etc/dhcpcd.conf"
 
-echo "  ✓ Created $INTERFACES_FILE with static IP 192.168.7.2"
+# Check if usb0 configuration already exists
+if ! grep -q "interface usb0" "$DHCPCD_FILE"; then
+    # Backup dhcpcd.conf
+    sudo cp "$DHCPCD_FILE" "${DHCPCD_FILE}.backup"
+
+    # Add usb0 static IP configuration
+    cat >> "$DHCPCD_FILE" <<EOF
+
+# USB Gadget Networking Interface
+interface usb0
+static ip_address=192.168.7.2/24
+nohook wpa_supplicant
+EOF
+    echo "  ✓ Added usb0 configuration to $DHCPCD_FILE"
+    echo "  ✓ Backup saved to ${DHCPCD_FILE}.backup"
+else
+    echo "  ✓ usb0 already configured in $DHCPCD_FILE"
+fi
 
 echo ""
 echo "Step 3: Enabling modules..."
