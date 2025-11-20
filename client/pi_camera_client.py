@@ -8,7 +8,6 @@ PySide6 desktop applications.
 
 import requests
 from typing import Dict, Optional, Tuple
-from io import BytesIO
 
 
 class PiCameraClient:
