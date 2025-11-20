@@ -104,7 +104,7 @@ fi
 
 # Update service file with actual project directory
 TEMP_SERVICE="/tmp/camera-api.service"
-sed "s|/home/pi/camera-api|$PROJECT_DIR|g" "$SERVICE_FILE" > "$TEMP_SERVICE"
+sed "s|/home/freddie/sl-wb-pi-api|$PROJECT_DIR|g" "$SERVICE_FILE" > "$TEMP_SERVICE"
 
 # Copy to systemd directory
 sudo cp "$TEMP_SERVICE" /etc/systemd/system/camera-api.service

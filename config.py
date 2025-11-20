@@ -14,14 +14,12 @@ class Config:
     DEBUG = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
 
     # Camera defaults
-    DEFAULT_EXPOSURE = 100  # milliseconds
+    DEFAULT_EXPOSURE = 100  # ms
     DEFAULT_FORMAT = 'tif'
 
-    # Validation ranges
-    EXPOSURE_MIN = 10       # milliseconds
-    EXPOSURE_MAX = 10000    # milliseconds (10 seconds)
-    QUALITY_MIN = 1
-    QUALITY_MAX = 100
+    # Validation ranges (ms)
+    EXPOSURE_MIN = 10       
+    EXPOSURE_MAX = 10000    
 
     # Supported image formats
     SUPPORTED_FORMATS = ['tif']
