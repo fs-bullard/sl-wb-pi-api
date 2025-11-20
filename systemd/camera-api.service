@@ -1,0 +1,17 @@
+[Unit]
+Description=Camera REST API Service
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/camera-api
+Environment="PATH=/home/pi/camera-api/venv/bin"
+ExecStart=/home/pi/camera-api/venv/bin/python camera_api.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
