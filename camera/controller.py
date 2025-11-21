@@ -128,39 +128,10 @@ class CameraController:
 
         logger.info(f"Capturing image: exposure={exp_time}ms, format={format}")
 
-        # PLACEHOLDER: Generate a test pattern image
+        # PLACEHOLDER: Use placeholder image
         # TODO: Replace with actual camera SDK capture call
         width, height = Config.PLACEHOLDER_RESOLUTION
-        image = Image.new('L', (width, height), color=30)
-
-        # Draw test pattern
-        draw = ImageDraw.Draw(image)
-
-        # Draw gradient bars
-        for i in range(0, width, 100):
-            draw.rectangle([i, 0, i + 100, height], fill=i)
-
-        # Draw grid
-        for x in range(0, width, 100):
-            draw.line([(x, 0), (x, height)], fill=255, width=1)
-        for y in range(0, height, 100):
-            draw.line([(0, y), (width, y)], fill=255, width=1)
-
-        # Add text overlay with capture info
-        timestamp = datetime.now().isoformat()
-        text_lines = [
-            f"PLACEHOLDER IMAGE",
-            f"Time: {timestamp}",
-            f"Exposure: {exp_time}ms",
-            f"Resolution: {width}x{height}"
-        ]
-
-        font = ImageFont.load_default()
-
-        y_offset = 50
-        for line in text_lines:
-            draw.text((50, y_offset), line, fill=255, font=font)
-            y_offset += 40
+        image = Image.open('10000ms.tif')
 
         # Convert to bytes
         buffer = BytesIO()
@@ -174,7 +145,7 @@ class CameraController:
 
         # Prepare metadata
         metadata = {
-            'timestamp': timestamp,
+            'timestamp': datetime.now().isoformat(),
             'exposure_time': exp_time,
             'resolution': f"{width}x{height}",
             'size_bytes': len(image_bytes),
