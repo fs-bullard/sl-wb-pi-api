@@ -160,7 +160,7 @@ Get camera capabilities and specifications.
 ```json
 {
   "capabilities": {
-    "max_resolution": [1920, 1080],
+    "max_resolution": [1536, 1030],
     "supported_formats": ["jpeg", "png"],
     "exposure_range": [10, 10000],
     "gain_range": [1.0, 16.0]

@@ -35,6 +35,6 @@ class Config:
     API_VERSION = '1.0.0'
 
     # Camera placeholder settings
-    PLACEHOLDER_RESOLUTION = (1920, 1080)
+    PLACEHOLDER_RESOLUTION = (1536, 1030)
     PLACEHOLDER_SENSOR_TYPE = 'CMOS'
     PLACEHOLDER_INTERFACE = 'USB 2.0'
