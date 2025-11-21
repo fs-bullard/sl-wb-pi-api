@@ -92,7 +92,7 @@ def capture():
         # Capture image
         image_bytes, metadata = camera.capture(
             exposure_time=exposure_time,
-            format=image_format,
+            format=image_format
         )
 
         # Prepare response with image data

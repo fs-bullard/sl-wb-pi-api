@@ -138,7 +138,7 @@ class CameraController:
 
         # Draw gradient bars
         for i in range(0, width, 100):
-            draw.rectangle([i, 0, i + 100, height], fill=i % 256)
+            draw.rectangle([i, 0, i + 100, height], fill=i)
 
         # Draw grid
         for x in range(0, width, 100):
@@ -159,7 +159,7 @@ class CameraController:
 
         y_offset = 50
         for line in text_lines:
-            draw.text((50, y_offset), line, fill=(255, 255, 255), font=font)
+            draw.text((50, y_offset), line, fill=255, font=font)
             y_offset += 40
 
         # Convert to bytes
