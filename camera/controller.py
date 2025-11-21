@@ -165,7 +165,7 @@ class CameraController:
         # Convert to bytes
         buffer = BytesIO()
         if format.lower() == 'tif':
-            image.save(buffer, format='tif')
+            image.save(buffer, format='tiff')
         else:
             logger.error(f"Unsupported format '{format}'")
             return
