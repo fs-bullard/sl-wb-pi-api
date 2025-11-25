@@ -4,7 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=freddie
+# Run as root to access USB device (no udev rules needed)
+User=root
 WorkingDirectory=/home/freddie/sl-wb-pi-api/src
 ExecStart=/home/freddie/sl-wb-pi-api/venv/bin/python3 flask_server.py
 Restart=on-failure
