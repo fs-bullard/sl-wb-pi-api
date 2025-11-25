@@ -1,4 +1,4 @@
-flask
-flask-cors
-pillow
-requests
+# Python dependencies for Western Blot Capture API
+# Minimal set for Pi Zero 2W resource constraints
+
+flask>=2.0.0

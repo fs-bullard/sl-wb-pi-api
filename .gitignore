@@ -207,6 +207,14 @@ marimo/_lsp/
 __marimo__/
 
 # Camera API runtime files
-config/
+config/camera_settings.json
 
-client/
+# Build artifacts
+*.o
+libcapture.so
+
+# Test/capture files
+*.raw
+*.tif
+*.tiff
+test_*
