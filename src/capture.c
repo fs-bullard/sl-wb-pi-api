@@ -85,15 +85,6 @@ void frame_cb(xdtusb_device_t* pdev, xdtusb_framebuf_t* pfb, void* puserargs)
 		printf ("%04x: %04x %04x %04x %04x %04x %04x %04x %04x\n", i*16, pframeData[0], pframeData[1], pframeData[2], pframeData[3], pframeData[4], pframeData[5], pframeData[6], pframeData[7]);
 		pframeData += 8;
 	}
-
-	uint32_t* pNumFramesReceived = (uint32_t*) puserargs;
-
-	// Increment number of frames received counter (Main loop looks at this)
-	(*pNumFramesReceived)++;
-
-	// When done commit processed buffer back to device so it is
-	// available for another frame reception
-	XDTUSB_FramebufCommit(pfb);
 }
 
 
@@ -104,7 +95,7 @@ int capture_frame(uint32_t exposure_ms)
 	// Initialize libxdtusb
 	XDTUSB_Init();
 
-	XDTUSB_SetTraceMode(XDTUSB_TRACEMODE_DEBUG);
+	// XDTUSB_SetTraceMode(XDTUSB_TRACEMODE_DEBUG);
 
 	printf(">>> Please Connect XDT device! <<<\n");
 
