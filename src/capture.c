@@ -148,7 +148,7 @@ int capture_frame(uint32_t exposure_ms)
 				// Start Streaming mode
 				XDTUSB_DeviceStartStreaming(pdev, frame_cb, NULL);
 
-				sleep(1);
+				// sleep(1);
 
 				// Issue SW trigger
 				XDTUSB_DeviceIssueSwTrigger(pdev);

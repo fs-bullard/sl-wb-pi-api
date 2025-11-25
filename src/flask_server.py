@@ -53,8 +53,8 @@ def load_c_library():
     # Define function signatures
 
     # int init_capture_device(void)
-    libcapture.init_capture_device.argtypes = []
-    libcapture.init_capture_device.restype = c_int
+    # libcapture.init_capture_device.argtypes = []
+    # libcapture.init_capture_device.restype = c_int
 
     # int capture_frame(uint32_t exposure_ms)
     libcapture.capture_frame.argtypes = [c_uint32]
@@ -62,49 +62,49 @@ def load_c_library():
 
     # void get_frame_data(uint32_t* width, uint32_t* height, uint32_t* pixel_size,
     #                     uint8_t** data, size_t* size)
-    libcapture.get_frame_data.argtypes = [
-        POINTER(c_uint32),  # width
-        POINTER(c_uint32),  # height
-        POINTER(c_uint32),  # pixel_size
-        POINTER(POINTER(c_uint8)),  # data
-        POINTER(c_size_t)   # size
-    ]
-    libcapture.get_frame_data.restype = None
+    # libcapture.get_frame_data.argtypes = [
+    #     POINTER(c_uint32),  # width
+    #     POINTER(c_uint32),  # height
+    #     POINTER(c_uint32),  # pixel_size
+    #     POINTER(POINTER(c_uint8)),  # data
+    #     POINTER(c_size_t)   # size
+    # ]
+    # libcapture.get_frame_data.restype = None
 
     # void cleanup_capture_device(void)
-    libcapture.cleanup_capture_device.argtypes = []
-    libcapture.cleanup_capture_device.restype = None
+    # libcapture.cleanup_capture_device.argtypes = []
+    # libcapture.cleanup_capture_device.restype = None
 
     logger.info("C library loaded successfully")
 
 
-def initialize_device():
-    """Initialize the camera device."""
-    global device_initialized
+# def initialize_device():
+#     """Initialize the camera device."""
+#     global device_initialized
 
-    if device_initialized:
-        logger.info("Device already initialized")
-        return True
+#     if device_initialized:
+#         logger.info("Device already initialized")
+#         return True
 
-    logger.info("Initializing capture device...")
-    ret = libcapture.init_capture_device()
+#     logger.info("Initializing capture device...")
+#     ret = libcapture.init_capture_device()
 
-    if ret == 0:
-        device_initialized = True
-        logger.info("Device initialized successfully")
-        return True
-    elif ret == -1:
-        logger.error("No device found")
-        return False
-    elif ret == -2:
-        logger.error("Device open failed")
-        return False
-    elif ret == -3:
-        logger.error("Initialization failed")
-        return False
-    else:
-        logger.error(f"Unknown error: {ret}")
-        return False
+#     if ret == 0:
+#         device_initialized = True
+#         logger.info("Device initialized successfully")
+#         return True
+#     elif ret == -1:
+#         logger.error("No device found")
+#         return False
+#     elif ret == -2:
+#         logger.error("Device open failed")
+#         return False
+#     elif ret == -3:
+#         logger.error("Initialization failed")
+#         return False
+#     else:
+#         logger.error(f"Unknown error: {ret}")
+#         return False
 
 
 @app.route('/health', methods=['GET'])
@@ -213,42 +213,43 @@ def capture():
     data_ptr = POINTER(c_uint8)()
     data_size = c_size_t()
 
-    try:
-        libcapture.get_frame_data(
-            byref(width),
-            byref(height),
-            byref(pixel_size),
-            byref(data_ptr),
-            byref(data_size)
-        )
-        logger.info(f"get_frame_data returned: {width.value}x{height.value}, {data_size.value} bytes")
-    except Exception as e:
-        logger.error(f"Exception in get_frame_data: {e}", exc_info=True)
-        return jsonify({
-            'status': 'error',
-            'message': f'Failed to get frame data: {str(e)}'
-        }), 500
+    # try:
+    #     libcapture.get_frame_data(
+    #         byref(width),
+    #         byref(height),
+    #         byref(pixel_size),
+    #         byref(data_ptr),
+    #         byref(data_size)
+    #     )
+    #     logger.info(f"get_frame_data returned: {width.value}x{height.value}, {data_size.value} bytes")
+    # except Exception as e:
+    #     logger.error(f"Exception in get_frame_data: {e}", exc_info=True)
+    #     return jsonify({
+    #         'status': 'error',
+    #         'message': f'Failed to get frame data: {str(e)}'
+    #     }), 500
 
-    # Copy frame data to Python bytes
-    try:
-        frame_bytes = bytes(data_ptr[:data_size.value])
-    except Exception as e:
-        logger.error(f"Exception copying frame data: {e}", exc_info=True)
-        return jsonify({
-            'status': 'error',
-            'message': f'Failed to copy frame data: {str(e)}'
-        }), 500
+    # # Copy frame data to Python bytes
+    # try:
+    #     frame_bytes = bytes(data_ptr[:data_size.value])
+    # except Exception as e:
+    #     logger.error(f"Exception copying frame data: {e}", exc_info=True)
+    #     return jsonify({
+    #         'status': 'error',
+    #         'message': f'Failed to copy frame data: {str(e)}'
+    #     }), 500
 
-    logger.info(f"Frame captured: {width.value}x{height.value}, {data_size.value} bytes")
+    # logger.info(f"Frame captured: {width.value}x{height.value}, {data_size.value} bytes")
 
-    # Create response with binary data
-    response = Response(frame_bytes, mimetype='application/octet-stream')
-    response.headers['X-Frame-Width'] = str(width.value)
-    response.headers['X-Frame-Height'] = str(height.value)
-    response.headers['X-Pixel-Size'] = str(pixel_size.value)
-    response.headers['X-Exposure-Ms'] = str(exposure_ms)
+    # # Create response with binary data
+    # response = Response(frame_bytes, mimetype='application/octet-stream')
+    # response.headers['X-Frame-Width'] = str(width.value)
+    # response.headers['X-Frame-Height'] = str(height.value)
+    # response.headers['X-Pixel-Size'] = str(pixel_size.value)
+    # response.headers['X-Exposure-Ms'] = str(exposure_ms)
 
-    return response
+    # return response
+    return Response()
 
 
 @app.route('/shutdown', methods=['POST'])
@@ -263,9 +264,9 @@ def shutdown():
 
     logger.info("Shutting down device...")
 
-    if device_initialized:
-        libcapture.cleanup_capture_device()
-        device_initialized = False
+    # if device_initialized:
+    #     libcapture.cleanup_capture_device()
+    #     device_initialized = False
 
     return jsonify({
         'status': 'success',
@@ -277,8 +278,8 @@ def signal_handler(sig, frame):
     """Handle shutdown signals gracefully."""
     logger.info(f"Received signal {sig}, shutting down...")
 
-    if device_initialized:
-        libcapture.cleanup_capture_device()
+    # if device_initialized:
+    #     libcapture.cleanup_capture_device()
 
     sys.exit(0)
 
@@ -300,9 +301,9 @@ def main():
         load_c_library()
 
         # Initialize device
-        if not initialize_device():
-            logger.error("Failed to initialize device. Exiting.")
-            sys.exit(1)
+        # if not initialize_device():
+        #     logger.error("Failed to initialize device. Exiting.")
+        #     sys.exit(1)
 
         # Start Flask server (single-threaded for Pi Zero)
         logger.info("Starting Flask server on 0.0.0.0:5000")
@@ -321,8 +322,8 @@ def main():
 
     except Exception as e:
         logger.error(f"Fatal error: {e}", exc_info=True)
-        if device_initialized:
-            libcapture.cleanup_capture_device()
+        # if device_initialized:
+        #     libcapture.cleanup_capture_device()
         sys.exit(1)
 
 
