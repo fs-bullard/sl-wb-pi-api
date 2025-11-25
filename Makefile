@@ -9,7 +9,7 @@ LDFLAGS = -shared -lpthread -lxdtusb
 
 # Directories
 SRC_DIR = src
-LIB_DIR = library_examples
+LIB_DIR = libraries
 BUILD_DIR = build
 
 # Files
