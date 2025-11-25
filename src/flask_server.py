@@ -147,11 +147,11 @@ def capture():
             - X-Exposure-Ms: Exposure time in ms
             - Content-Type: application/octet-stream
     """
-    if not device_initialized:
-        return jsonify({
-            'status': 'error',
-            'message': 'Device not initialized'
-        }), 503
+    # if not device_initialized:
+        # return jsonify({
+        #     'status': 'error',
+        #     'message': 'Device not initialized'
+        # }), 503
 
     # Parse request
     data = request.get_json()
