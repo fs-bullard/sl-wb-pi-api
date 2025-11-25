@@ -14,11 +14,9 @@
 #include <time.h>
 #include <errno.h>
 #include <pthread.h>
-#include <unistd.h>
 
-/* Global device handle and frame buffer (single frame only) */
+/* Global device handle (single frame only) */
 static xdtusb_device_t* g_device = NULL;
-static xdtusb_framebuf_t* g_framebuf = NULL;
 static int g_initialized = 0;
 
 /* Frame data storage (static buffer reused across captures) */
@@ -39,6 +37,9 @@ static int g_frame_ready = 0;
  */
 static void frame_callback(xdtusb_device_t* pdev, xdtusb_framebuf_t* pfb, void* puserargs)
 {
+    (void)pdev;      /* Unused - we use global g_device */
+    (void)puserargs; /* Unused - no user data needed */
+
     pthread_mutex_lock(&g_capture_mutex);
 
     /* Get frame dimensions */
@@ -71,17 +72,19 @@ static void frame_callback(xdtusb_device_t* pdev, xdtusb_framebuf_t* pfb, void* 
     /* Store frame metadata */
     g_frame_width = pframeDims->width;
     g_frame_height = pframeDims->height;
-    g_frame_size = g_frame_width * g_frame_height * sizeof(xdtusb_pixel_t);
+    size_t new_frame_size = g_frame_width * g_frame_height * sizeof(xdtusb_pixel_t);
 
-    /* Allocate or reallocate frame buffer if needed */
-    if (g_frame_data == NULL || g_frame_size > 0) {
-        g_frame_data = (uint8_t*)realloc(g_frame_data, g_frame_size);
-        if (g_frame_data == NULL) {
-            fprintf(stderr, "Error allocating frame buffer\n");
+    /* Allocate or reallocate frame buffer ONLY if size changed or not allocated */
+    if (g_frame_data == NULL || new_frame_size != g_frame_size) {
+        uint8_t* new_buffer = (uint8_t*)realloc(g_frame_data, new_frame_size);
+        if (new_buffer == NULL) {
+            fprintf(stderr, "Error allocating frame buffer (%zu bytes)\n", new_frame_size);
             pthread_mutex_unlock(&g_capture_mutex);
             XDTUSB_FramebufCommit(pfb);
             return;
         }
+        g_frame_data = new_buffer;
+        g_frame_size = new_frame_size;
     }
 
     /* Copy frame data to static buffer */
