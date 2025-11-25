@@ -180,7 +180,16 @@ def capture():
 
     # Capture frame
     logger.info(f"Capturing frame with exposure: {exposure_ms} ms")
-    ret = libcapture.capture_frame(c_uint32(exposure_ms))
+
+    try:
+        ret = libcapture.capture_frame(c_uint32(exposure_ms))
+        logger.info(f"capture_frame returned: {ret}")
+    except Exception as e:
+        logger.error(f"Exception in capture_frame: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': f'C library error: {str(e)}'
+        }), 500
 
     if ret != 0:
         error_messages = {
@@ -204,16 +213,31 @@ def capture():
     data_ptr = POINTER(c_uint8)()
     data_size = c_size_t()
 
-    libcapture.get_frame_data(
-        byref(width),
-        byref(height),
-        byref(pixel_size),
-        byref(data_ptr),
-        byref(data_size)
-    )
+    try:
+        libcapture.get_frame_data(
+            byref(width),
+            byref(height),
+            byref(pixel_size),
+            byref(data_ptr),
+            byref(data_size)
+        )
+        logger.info(f"get_frame_data returned: {width.value}x{height.value}, {data_size.value} bytes")
+    except Exception as e:
+        logger.error(f"Exception in get_frame_data: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to get frame data: {str(e)}'
+        }), 500
 
     # Copy frame data to Python bytes
-    frame_bytes = bytes(data_ptr[:data_size.value])
+    try:
+        frame_bytes = bytes(data_ptr[:data_size.value])
+    except Exception as e:
+        logger.error(f"Exception copying frame data: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to copy frame data: {str(e)}'
+        }), 500
 
     logger.info(f"Frame captured: {width.value}x{height.value}, {data_size.value} bytes")
 

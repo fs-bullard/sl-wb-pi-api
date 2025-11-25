@@ -1,559 +1,459 @@
-# Camera REST API for Pi Zero 2W
+# Western Blot Camera Capture API
 
-REST API server for controlling a custom USB camera sensor on Raspberry Pi Zero 2W, designed for integration with SwiftImager desktop application.
+C-based camera control API for Raspberry Pi Zero 2W with Flask HTTP interface. Designed for efficient image capture from XDT USB cameras using libxdtusb SDK.
 
-## Features
+## Architecture
 
-- **REST API** with 5 endpoints for camera control
-- **Dual connectivity**: USB gadget networking (192.168.7.2) or WiFi
-- **Binary image responses** for efficient transfer
-- **Persistent camera settings** saved across reboots
-- **Placeholder camera implementation** ready for SDK integration
-- **Systemd service** for automatic startup
-- **Python client library** for desktop app integration
+```
+Laptop/Desktop → HTTP → Flask Server → ctypes → libcapture.so → libxdtusb.so → Camera
+                          (Python)               (Our C code)    (Vendor SDK)
+```
+
+**Key Features:**
+- **C library wrapper** for direct libxdtusb integration
+- **Thread-safe blocking capture** with pthread synchronization
+- **Single frame buffer** for memory efficiency
+- **Binary response streaming** for minimal network overhead
+- **Minimal dependencies** optimized for Pi Zero 2W
+
+## Project Structure
+
+```
+sl-wb-pi-api/
+├── src/
+│   ├── capture.c              # C shared library for camera control
+│   ├── capture.h              # Header file
+│   └── flask_server.py        # Flask HTTP server
+├── scripts/
+│   ├── install.sh             # One-time installation
+│   └── deploy.sh              # Quick rebuild and restart
+├── config/
+│   └── capture.service        # Systemd service file
+├── library_examples/
+│   ├── xdtusb.h               # XDT USB SDK header
+│   └── libxdtusb.so           # XDT USB SDK library (place here)
+├── Makefile                   # Build configuration
+└── requirements.txt           # Python dependencies (Flask only)
+```
 
 ## Hardware Requirements
 
 - Raspberry Pi Zero 2W
-- Pi OS Lite (Bookworm or Bullseye)
-- Python 3.9+ (tested with Python 3.13)
-- Custom USB camera sensor (placeholder implementation included)
-- USB cable for data connection (not just power!)
+- Raspberry Pi OS Lite (Bookworm recommended)
+- XDT USB camera sensor
+- libxdtusb SDK files in `library_examples/`
 
-## Quick Start
+## Installation
 
-### On Pi Zero 2W
+### On Raspberry Pi Zero 2W
 
 ```bash
-# Clone repository
-cd ~
-git clone <your-repo-url> camera-api
-cd camera-api
+# 1. Clone repository
+cd /home/freddie
+git clone <your-repo-url> sl-wb-pi-api
+cd sl-wb-pi-api
 
-# Install service (creates venv, installs dependencies, enables systemd service)
-chmod +x setup_scripts/install_service.sh
-./setup_scripts/install_service.sh
+# 2. Ensure libxdtusb.so is in library_examples/
+ls library_examples/libxdtusb.so
 
-# Optional: Configure USB gadget mode for USB networking
-chmod +x setup_scripts/setup_usb_gadget.sh
-sudo ./setup_scripts/setup_usb_gadget.sh
-# Reboot after USB gadget setup
+# 3. Run installation script
+chmod +x scripts/install.sh
+./scripts/install.sh
 ```
 
-### On Laptop/Desktop
+The installation script will:
+1. Install system dependencies (build-essential, libcurl, libusb)
+2. Install libxdtusb to `/usr/local/lib/`
+3. Build `libcapture.so`
+4. Create Python virtual environment
+5. Install Flask
+6. Install and start systemd service
+
+### Verify Installation
 
 ```bash
-# Clone repository
-git clone <your-repo-url> camera-api
-cd camera-api
+# Check service status
+sudo systemctl status capture
 
-# Install client library
-pip install requests pillow
+# View logs
+sudo journalctl -u capture -f
 
-# Test connection (USB)
-python client/pi_camera_client.py
+# Test health endpoint
+curl http://localhost:5000/health
 ```
 
 ## API Documentation
 
 ### Base URL
-
-- **USB**: `http://192.168.7.2:5000`
-- **WiFi**: `http://<pi-ip>:5000` or `http://raspberrypi.local:5000`
+- **Local**: `http://localhost:5000`
+- **Network**: `http://<pi-ip>:5000`
 
 ### Endpoints
 
-#### POST /capture
+#### `GET /health`
 
-Capture an image from the camera.
+Check device status and readiness.
+
+**Response 200 (Ready):**
+```json
+{
+  "status": "ready",
+  "device": "connected"
+}
+```
+
+**Response 503 (Not Ready):**
+```json
+{
+  "status": "not_ready",
+  "device": "not_initialized"
+}
+```
+
+#### `POST /capture`
+
+Capture a single frame from the camera.
 
 **Request:**
 ```json
 {
-  "exposure_time": 100,    // Optional: 10-10000 ms
-  "format": "jpeg",        // Optional: jpeg|png
-  "quality": 90            // Optional: 1-100 (JPEG only)
+  "exposure_ms": 1000
 }
 ```
 
-**Response:**
-- Binary image data
-- Headers:
-  - `Content-Type`: `image/jpeg` or `image/png`
-  - `X-Camera-Timestamp`: ISO timestamp
-  - `X-Camera-Exposure`: Exposure time in ms
-  - `X-Camera-Resolution`: `WIDTHxHEIGHT`
-  - `X-Image-Size-Bytes`: Image size in bytes
+**Parameters:**
+- `exposure_ms` (required): Exposure time in milliseconds (10-10000)
 
-**Example:**
+**Response 200:**
+- **Content-Type**: `application/octet-stream`
+- **Body**: Raw binary frame data (uint16 pixels, little-endian)
+- **Headers**:
+  - `X-Frame-Width`: Frame width in pixels
+  - `X-Frame-Height`: Frame height in pixels
+  - `X-Pixel-Size`: Bytes per pixel (always 2)
+  - `X-Exposure-Ms`: Exposure time used
+
+**Response 400 (Validation Error):**
+```json
+{
+  "status": "error",
+  "message": "exposure_ms must be between 10 and 10000"
+}
+```
+
+**Response 500 (Capture Failed):**
+```json
+{
+  "status": "error",
+  "message": "Capture timeout"
+}
+```
+
+**Example (curl):**
+```bash
+# Capture with 100ms exposure, save to file
+curl -X POST http://localhost:5000/capture \
+  -H 'Content-Type: application/json' \
+  -d '{"exposure_ms": 100}' \
+  --output capture.raw
+
+# View metadata from headers
+curl -i -X POST http://localhost:5000/capture \
+  -H 'Content-Type: application/json' \
+  -d '{"exposure_ms": 500}' \
+  --output capture.raw
+```
+
+**Example (Python):**
 ```python
-from client.pi_camera_client import PiCameraClient
+import requests
+import numpy as np
 
-client = PiCameraClient(host='192.168.7.2')
-image_bytes, metadata = client.capture_image(exposure_time=150, quality=95)
+# Capture image
+response = requests.post(
+    'http://192.168.1.100:5000/capture',
+    json={'exposure_ms': 1000}
+)
 
-# Save image
-with open('capture.jpg', 'wb') as f:
-    f.write(image_bytes)
+if response.status_code == 200:
+    # Get metadata from headers
+    width = int(response.headers['X-Frame-Width'])
+    height = int(response.headers['X-Frame-Height'])
+
+    # Parse raw uint16 data
+    raw_data = response.content
+    image = np.frombuffer(raw_data, dtype=np.uint16)
+    image = image.reshape((height, width))
+
+    print(f"Captured: {width}x{height}, exposure: {response.headers['X-Exposure-Ms']}ms")
+else:
+    print(f"Error: {response.json()}")
 ```
 
-#### GET /status
+#### `POST /shutdown`
 
-Check camera and API status.
+Gracefully shutdown camera device.
 
-**Response:**
-```json
-{
-  "camera_connected": true,
-  "camera_model": "Custom USB Camera",
-  "api_version": "1.0.0",
-  "uptime_seconds": 3600
-}
-```
-
-#### GET /settings
-
-Get current camera settings.
-
-**Response:**
-```json
-{
-  "exposure_time": 100,
-  "gain": 1.0,
-  "brightness": 50,
-  "contrast": 50
-}
-```
-
-#### POST /settings
-
-Update camera settings.
-
-**Request:**
-```json
-{
-  "exposure_time": 150,  // Optional: 10-10000 ms
-  "gain": 2.0,          // Optional
-  "brightness": 60,      // Optional
-  "contrast": 55         // Optional
-}
-```
-
-**Response:**
+**Response 200:**
 ```json
 {
   "status": "success",
-  "settings": {
-    "exposure_time": 150,
-    "gain": 2.0,
-    "brightness": 60,
-    "contrast": 55
-  }
+  "message": "Device shutdown complete"
 }
-```
-
-#### GET /info
-
-Get camera capabilities and specifications.
-
-**Response:**
-```json
-{
-  "capabilities": {
-    "max_resolution": [1030, 1536],
-    "supported_formats": ["jpeg", "png"],
-    "exposure_range": [10, 10000],
-    "gain_range": [1.0, 16.0]
-  },
-  "specifications": {
-    "sensor_type": "CMOS",
-    "interface": "USB 2.0"
-  }
-}
-```
-
-## Client Library Usage
-
-### Basic Example
-
-```python
-from client.pi_camera_client import PiCameraClient
-
-# Initialize client (USB connection)
-client = PiCameraClient(host='192.168.7.2')
-
-# Or WiFi connection
-# client = PiCameraClient(host='192.168.1.100')  # Pi's WiFi IP
-# client = PiCameraClient(host='raspberrypi.local')  # Using hostname
-
-# Test connection
-if not client.test_connection():
-    print("Cannot connect to camera API")
-    exit(1)
-
-# Capture image
-image_bytes, metadata = client.capture_image(
-    exposure_time=100,
-    format='jpeg',
-    quality=90
-)
-print(f"Captured {metadata['size_bytes']} bytes")
-
-# Get status
-status = client.get_status()
-print(f"Camera connected: {status['camera_connected']}")
-
-# Update settings
-client.update_settings(exposure_time=200, gain=1.5)
-
-# Get current settings
-settings = client.get_settings()
-print(f"Exposure: {settings['exposure_time']} ms")
-```
-
-### PySide6 Integration
-
-For PySide6 desktop applications, run camera operations in QThread to avoid blocking the UI:
-
-```python
-from PySide6.QtCore import QThread, Signal
-from client.pi_camera_client import PiCameraClient
-
-class CaptureThread(QThread):
-    image_captured = Signal(bytes, dict)
-    error_occurred = Signal(str)
-
-    def __init__(self, client, exposure_time):
-        super().__init__()
-        self.client = client
-        self.exposure_time = exposure_time
-
-    def run(self):
-        try:
-            image_bytes, metadata = self.client.capture_image(
-                exposure_time=self.exposure_time
-            )
-            self.image_captured.emit(image_bytes, metadata)
-        except Exception as e:
-            self.error_occurred.emit(str(e))
-
-# In your main window
-client = PiCameraClient(host='192.168.7.2')
-thread = CaptureThread(client, exposure_time=150)
-thread.image_captured.connect(self.on_image_captured)
-thread.error_occurred.connect(self.on_error)
-thread.start()
-```
-
-## USB Gadget Networking Setup
-
-To enable USB networking on Pi Zero 2W:
-
-### 1. Run Setup Script (on Pi)
-
-```bash
-chmod +x setup_scripts/setup_usb_gadget.sh
-sudo ./setup_scripts/setup_usb_gadget.sh
-sudo reboot
-```
-
-### 2. Connect to Laptop
-
-- Use **data-capable USB cable** (not power-only)
-- Connect to USB data port on Pi Zero (inner port, not power port)
-- Wait ~30 seconds after Pi boots
-
-### 3. Configure Laptop
-
-**Windows:**
-1. Control Panel → Network and Internet → Network Connections
-2. Find new network adapter (RNDIS/Ethernet Gadget)
-3. Properties → TCP/IPv4 → Use the following IP:
-   - IP: `192.168.7.1`
-   - Subnet: `255.255.255.0`
-4. Test: `ping 192.168.7.2`
-
-**Linux:**
-```bash
-# Should auto-configure, if not:
-sudo ip addr add 192.168.7.1/24 dev usb0
-ping 192.168.7.2
-```
-
-**macOS:**
-```bash
-# Find interface (usually en5 or similar)
-ifconfig
-sudo ifconfig en5 192.168.7.1 netmask 255.255.255.0
-ping 192.168.7.2
 ```
 
 ## Development Workflow
 
-### Update Code on Pi
+### Build and Deploy
 
 ```bash
-# On Pi Zero 2W
-cd ~/camera-api
-git pull
-sudo systemctl restart camera-api
+# Quick rebuild and restart
+cd /home/freddie/sl-wb-pi-api
+./scripts/deploy.sh
+```
+
+### Manual Build
+
+```bash
+# Build C library
+make clean
+make
+
+# Restart service
+sudo systemctl restart capture
 ```
 
 ### View Logs
 
 ```bash
 # Follow live logs
-sudo journalctl -u camera-api -f
+sudo journalctl -u capture -f
 
 # Last 50 lines
-sudo journalctl -u camera-api -n 50
+sudo journalctl -u capture -n 50
 
 # Since boot
-sudo journalctl -u camera-api -b
+sudo journalctl -u capture -b
 ```
 
 ### Service Management
 
 ```bash
-# Start service
-sudo systemctl start camera-api
+# Start
+sudo systemctl start capture
 
-# Stop service
-sudo systemctl stop camera-api
+# Stop
+sudo systemctl stop capture
 
-# Restart service
-sudo systemctl restart camera-api
+# Restart
+sudo systemctl restart capture
 
-# Check status
-sudo systemctl status camera-api
+# Status
+sudo systemctl status capture
 
 # Disable auto-start
-sudo systemctl disable camera-api
+sudo systemctl disable capture
 
 # Enable auto-start
-sudo systemctl enable camera-api
+sudo systemctl enable capture
 ```
 
-## Project Structure
+## Memory & Performance
 
-```
-sl-wb-pi-api/
-├── camera_api.py              # Main Flask application
-├── config.py                  # Configuration settings
-├── requirements.txt           # Python dependencies
-├── camera/
-│   ├── __init__.py
-│   └── controller.py          # Camera abstraction layer (placeholder)
-├── client/
-│   ├── __init__.py
-│   └── pi_camera_client.py    # Python client library
-├── config/
-│   └── camera_settings.json   # Persistent settings (auto-created)
-├── systemd/
-│   └── camera-api.service     # Systemd service file
-├── setup_scripts/
-│   ├── setup_usb_gadget.sh    # USB gadget configuration
-│   └── install_service.sh     # Service installation
-└── README.md                  # This file
-```
+### Optimizations for Pi Zero 2W
 
-## Configuration
+1. **Single frame buffer**: Only 1 buffer allocated (~3MB for 1536×1030 sensor)
+2. **No Python image processing**: Raw binary transfer, no PIL/numpy on Pi
+3. **Static allocation**: Frame buffer reused across captures
+4. **Single-threaded Flask**: Minimal context switching overhead
+5. **Direct memory access**: ctypes provides zero-copy access to C buffer
 
-### Environment Variables
+### Expected Performance
 
-Set environment variables to customize API behavior:
-
-```bash
-# Enable debug mode (verbose logging)
-export FLASK_DEBUG=true
-
-# Set log level
-export LOG_LEVEL=DEBUG  # DEBUG, INFO, WARNING, ERROR
-
-# Run API manually with custom settings
-cd ~/camera-api
-source venv/bin/activate
-python camera_api.py
-```
-
-### Camera Settings Persistence
-
-Camera settings are saved to `config/camera_settings.json` and persist across:
-- API restarts
-- Pi reboots
-- Service updates
-
-Default settings:
-```json
-{
-  "exposure_time": 100,
-  "gain": 1.0,
-  "brightness": 50,
-  "contrast": 50
-}
-```
-
-## Integrating Real Camera SDK
-
-The current implementation uses a placeholder camera. To integrate your actual USB camera:
-
-### 1. Edit `camera/controller.py`
-
-Replace the `capture()` method in the `CameraController` class:
-
-```python
-def capture(self, exposure_time: int | None = None,
-            format: str = Config.DEFAULT_FORMAT,
-            quality: int = Config.DEFAULT_QUALITY) -> tuple[bytes, dict]:
-    """Capture image from real camera."""
-
-    # Your camera SDK code here
-    import your_camera_sdk
-
-    # Set exposure
-    exp_time = exposure_time if exposure_time else self.settings['exposure_time']
-    your_camera_sdk.set_exposure(exp_time)
-
-    # Capture image
-    image_data = your_camera_sdk.capture()
-
-    # Convert to bytes
-    buffer = BytesIO()
-    if format.lower() == 'png':
-        image_data.save(buffer, format='PNG')
-    else:
-        image_data.save(buffer, format='JPEG', quality=quality)
-
-    image_bytes = buffer.getvalue()
-
-    # Return image and metadata
-    metadata = {
-        'timestamp': datetime.now().isoformat(),
-        'exposure_time': exp_time,
-        'resolution': f"{image_data.width}x{image_data.height}",
-        'size_bytes': len(image_bytes),
-        'format': format,
-        'quality': quality if format.lower() == 'jpeg' else None
-    }
-
-    return image_bytes, metadata
-```
-
-### 2. Add Camera SDK to Requirements
-
-Edit `requirements.txt`:
-```
-flask
-flask-cors
-pillow
-requests
-your-camera-sdk==1.2.3  # Add your camera SDK
-```
-
-### 3. Update and Restart
-
-```bash
-cd ~/camera-api
-source venv/bin/activate
-pip install -r requirements.txt
-sudo systemctl restart camera-api
-```
+- **Memory usage**: ~30-50MB (Flask + C library + frame buffer)
+- **Capture latency**: Exposure time + ~100-500ms overhead
+- **Network transfer**: ~3MB raw data @ USB 2.0 speeds (~20-40MB/s)
 
 ## Troubleshooting
 
-### API Won't Start
+### Service Won't Start
 
 ```bash
 # Check logs
-sudo journalctl -u camera-api -n 50
+sudo journalctl -u capture -n 50
 
 # Common issues:
-# - Missing dependencies: pip install -r requirements.txt
-# - Port already in use: sudo lsof -i :5000
-# - Permission issues: Check file ownership
+# - libxdtusb not installed: Run install.sh again
+# - libcapture.so not built: make clean && make
+# - Camera not connected: Check USB connection
 ```
 
-### USB Connection Not Working
+### Capture Timeout
+
+**Symptoms**: Capture returns error "Capture timeout"
+
+**Solutions**:
+1. Check camera is connected: `lsusb | grep XDT`
+2. Verify camera responds: Check dmesg for USB errors
+3. Increase exposure time (camera may need longer exposure)
+4. Restart service: `sudo systemctl restart capture`
+
+### "Device not initialized" Error
+
+**Symptoms**: `/capture` returns "Device not initialized"
+
+**Solutions**:
+1. Check service logs: `sudo journalctl -u capture -f`
+2. Look for device detection errors on startup
+3. Verify camera is connected before service starts
+4. Restart service after connecting camera
+
+### USB Permission / ACCESS Error
+
+**Symptoms**: Service logs show "XDTUSB_DETECT: Could not create device information (ACCESS)"
+
+**Cause**: User doesn't have permission to access USB device
+
+**Solution**:
+```bash
+# Run the permission fix script
+sudo ./scripts/fix_usb_permissions.sh
+
+# Reconnect camera or reboot
+sudo reboot
+
+# Restart service
+sudo systemctl restart capture
+```
+
+**Manual Fix**:
+```bash
+# Find your device
+lsusb | grep -i xdt
+
+# Create udev rule (replace VENDOR_ID and PRODUCT_ID)
+sudo nano /etc/udev/rules.d/99-xdtusb.rules
+
+# Add this line:
+SUBSYSTEM=="usb", ATTRS{idVendor}=="VENDOR_ID", ATTRS{idProduct}=="PRODUCT_ID", MODE="0666", GROUP="plugdev"
+
+# Reload rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+
+# Reconnect camera
+```
+
+### Library Loading Error
+
+**Symptoms**: "libcapture.so not found" or "cannot open shared object file"
+
+**Solutions**:
+```bash
+# Rebuild library
+cd /home/freddie/sl-wb-pi-api
+make clean
+make
+
+# Verify library exists
+ls -lh libcapture.so
+
+# Check library dependencies
+ldd libcapture.so
+
+# If libxdtusb missing:
+sudo ldconfig
+```
+
+## Testing
+
+### Health Check
 
 ```bash
-# On Pi - Check interface
-ip addr show usb0
-
-# Should show: inet 192.168.7.2/24
-
-# On laptop - Test network
-ping 192.168.7.2
-
-# If no response:
-# 1. Check cable (must be data cable, not power-only)
-# 2. Check laptop network settings (should have 192.168.7.1)
-# 3. Reboot Pi
-# 4. Try different USB port on laptop
+curl http://localhost:5000/health
 ```
 
-### Camera Not Detected
+Expected output:
+```json
+{"status": "ready", "device": "connected"}
+```
+
+### Capture Test
 
 ```bash
-# Check USB devices
-lsusb
+# Capture with 100ms exposure
+curl -X POST http://localhost:5000/capture \
+  -H 'Content-Type: application/json' \
+  -d '{"exposure_ms": 100}' \
+  --output test_100ms.raw
 
-# Check dmesg for camera messages
-dmesg | grep -i camera
-
-# Test with v4l2 (if using V4L2 camera)
-v4l2-ctl --list-devices
+# Verify file size (should be width × height × 2 bytes)
+ls -lh test_100ms.raw
 ```
 
-### Connection Timeout
-
-```python
-# Increase timeout in client
-client = PiCameraClient(host='192.168.7.2', timeout=60)  # 60 seconds
-```
-
-### Settings Not Persisting
+### Load Test
 
 ```bash
-# Check config directory permissions
-ls -la ~/camera-api/config/
-
-# Should be owned by 'pi' user
-# If not:
-sudo chown -R pi:pi ~/camera-api/config/
+# Multiple captures
+for i in {1..10}; do
+  echo "Capture $i..."
+  curl -X POST http://localhost:5000/capture \
+    -H 'Content-Type: application/json' \
+    -d '{"exposure_ms": 100}' \
+    --output test_$i.raw
+done
 ```
 
-## Performance Notes
+## Technical Details
 
-### Pi Zero 2W Limitations
+### C Library Implementation
 
-- **RAM**: 512MB - Keep images reasonable size
-- **CPU**: Quad-core ARM Cortex-A53 @ 1GHz - Expect ~1-3 seconds per capture
-- **Network**: USB 2.0 (~20-40 MB/s realistic), WiFi 2.4GHz (~5-15 MB/s)
+The `libcapture.so` library provides thread-safe camera operations:
 
-### Optimization Tips
+**Functions:**
+- `init_capture_device()`: Initialize XDT device with 1 frame buffer
+- `capture_frame(exposure_ms)`: Blocking capture with timeout
+- `get_frame_data(...)`: Retrieve captured frame metadata and data pointer
+- `cleanup_capture_device()`: Release resources
 
-- Use JPEG instead of PNG for faster transfer
-- Lower JPEG quality for faster encoding (quality=70-80 is good balance)
-- Consider image downscaling for previews
-- Use WiFi for wireless convenience, USB for maximum speed
+**Synchronization:**
+- Uses pthread mutex and condition variable
+- Frame callback signals when capture complete
+- Timeout = exposure_time + 10 seconds
+
+**Memory Management:**
+- Single static frame buffer
+- Reused across captures (no malloc/free per frame)
+- Data valid until next capture
+
+### Flask Server Implementation
+
+**ctypes Integration:**
+- Loads `libcapture.so` at startup
+- Defines C function signatures
+- Provides zero-copy access to frame buffer
+
+**Resource Management:**
+- Single-threaded (threaded=False)
+- Streams response directly from C buffer
+- No temporary Python objects for image data
 
 ## Contributing
 
-This is a template project designed for easy customization. Feel free to:
-- Add authentication (API keys, JWT)
-- Implement streaming endpoints
-- Add batch capture support
-- Extend camera settings
-- Add image processing endpoints
+For issues or improvements:
+1. Test changes locally
+2. Build with `make clean && make`
+3. Verify with deployment script
+4. Check service logs for errors
 
 ## License
 
-MIT License - Free to use and modify for your SwiftImager project.
+MIT License - Free to use and modify.
 
 ## Support
 
-For issues or questions:
-1. Check logs: `sudo journalctl -u camera-api -f`
-2. Test with example client: `python client/pi_camera_client.py`
-3. Verify network connectivity: `ping 192.168.7.2`
-4. Check camera connection: `lsusb`
+For issues:
+1. Check service logs: `sudo journalctl -u capture -f`
+2. Verify camera connection: `lsusb`
+3. Test with health endpoint
+4. Review error messages in logs
