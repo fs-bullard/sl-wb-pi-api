@@ -6,7 +6,7 @@
  */
 
 #include "capture.h"
-#include "../library_examples/xdtusb.h"
+#include "../libraries/xdtusb.h"
 
 #include <stdio.h>
 #include <stdlib.h>
