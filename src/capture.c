@@ -1,16 +1,8 @@
 /** \file
  *
- * libxdtusb example.
+ * capture.c.
  *
- * This example receives a SequenceExposureMode sequence.
- * Received frames are handled in the frame_cb callback.
- *
- * There are NUM_FRAME_BUFS frame buffers (which also equals the length of the sequence),
- * which ensures that even if the Application does not commit frames immediately
- * (e.g. if the processing in frame_cb takes very long or the application would not commit the frames right away
- * in the frame_cb (it does in the example)), all frames will be received.
- *
- * \author peter.dietzsch@ib-dt.de http://www.ib-dt.de
+ * Wrapper for lubxdtusb camera operations.
  *
  */
 
@@ -70,108 +62,184 @@ void frame_cb(xdtusb_device_t* pdev, xdtusb_framebuf_t* pfb, void* puserargs)
 	xdtusb_pixel_t* pframeData;
 	XDTUSB_FramebufGetData(pfb, &pframeData);
 
-	// Do some processing on the data
-	//
-	// This can be anything done directly here (there is no
-	// strict timing requirement on this callback)
-	// or the frame could also be passed to another thread
-
 	// For simplicity just output some frame information
 	printf("\nFrame received (h=%4u, w=%4u)\n", pframeDims->height, pframeDims->width);
 	printf("-------------------------------\n");
-	// Trace out the first 16 pixels of the frame here
-	const uint32_t traceCount = 16;
-	for (uint32_t i = 0; i < (traceCount+(8-1))/8; i++) {
-		printf ("%04x: %04x %04x %04x %04x %04x %04x %04x %04x\n", i*16, pframeData[0], pframeData[1], pframeData[2], pframeData[3], pframeData[4], pframeData[5], pframeData[6], pframeData[7]);
-		pframeData += 8;
-	}
+
+	// Store frame data 
+	uint32_t frame_width = pframeDims->width;
+
 }
 
 
-
-int capture_frame(uint32_t exposure_ms)
+int init_device(xdtusb_device_t* pdev)
 {
-
 	// Initialize libxdtusb
 	XDTUSB_Init();
+	
+	// Poll devices
+	uint8_t numDevices;
+	xdtusb_device_t** devlist;
+	XDTUSB_PollDevices(&numDevices, &devlist);
 
-	// XDTUSB_SetTraceMode(XDTUSB_TRACEMODE_DEBUG);
-
-	printf(">>> Please Connect XDT device! <<<\n");
-
-	// We are polling the device list every second
-	// and time-out after 20 seconds and no device was found
-	// This polling could be moved to a dedicated thread which signals a found
-	// device to another
-	for (int i = 0; i < 20; ++i)
+	// If XDTUSB devices were found
+	if (numDevices > 1)
 	{
-		// Poll devices
-		uint8_t numDevices;
-		xdtusb_device_t** devlist;
-		XDTUSB_PollDevices(&numDevices, &devlist);
 
-		// Trace progress
-		printf("%us: Found %u devices\r", i, numDevices);
-		fflush(stdout);
+		// Use first device found
+		xdtusb_device_t* pdev = devlist[0];
 
-		// If XDTUSB devices were found
-		if (numDevices > 0)
+		// Open device
+		xdtusb_error_t err;
+		err = XDTUSB_DeviceOpen(pdev, 1);
+		if (err != XDTUSB_ERROR_SUCCESS)
 		{
+			// Get some firmware information
+			xdtusb_fwinfo_t afp_fwinfo;
+			XDTUSB_DeviceGetAfpInfo(pdev, &afp_fwinfo);
+			printf("AFP rev=0x%04X, build time=%02u-%02u-%04u %02u:%02u\n", afp_fwinfo.rev, afp_fwinfo.day, afp_fwinfo.month, afp_fwinfo.year, afp_fwinfo.hour, afp_fwinfo.minute);
 
-			// Use first device found
-			xdtusb_device_t* pdev = devlist[0];
+			// Set Acquisition Mode
+			XDTUSB_DeviceSetAcquisitionMode(pdev, XDT_ACQ_MODE_SEQ);
 
-			// Open device
-			if (XDTUSB_ERROR_SUCCESS == XDTUSB_DeviceOpen(pdev, 1))
-			{
-
-				// Get some firmware information
-				xdtusb_fwinfo_t afp_fwinfo;
-				XDTUSB_DeviceGetAfpInfo(pdev, &afp_fwinfo);
-				printf("AFP rev=0x%04X, build time=%02u-%02u-%04u %02u:%02u\n", afp_fwinfo.rev, afp_fwinfo.day, afp_fwinfo.month, afp_fwinfo.year, afp_fwinfo.hour, afp_fwinfo.minute);
-
-				// Set Acquisition Mode
-				XDTUSB_DeviceSetAcquisitionMode(pdev, XDT_ACQ_MODE_SEQ);
-
-				// Configure Sequence
-				XDTUSB_DeviceSetSequenceModeParameters(pdev, /*numFrames*/ 1, /*expTimeUs*/ exposure_ms, /*numDummy*/ 0, /*expTimeDummy*/ 0);
-
-				// Start Streaming mode
-				XDTUSB_DeviceStartStreaming(pdev, frame_cb, NULL);
-
-				// sleep(1);
-
-				// Issue SW trigger
-				XDTUSB_DeviceIssueSwTrigger(pdev);
-
-				// TODO: Do we need to sleep to make sure frame is received before stopping stream
-
-				// Stop Streaming mode
-				XDTUSB_DeviceStopStreaming(pdev);
-
-				// Close device
-				XDTUSB_DeviceClose(pdev);
-
-			}
-			else
-			{
-				XDTUSB_Exit();
-				exit(EXIT_FAILURE);
-			}
-			// Done
-			break;
-
+			return 0;
 		}
-
-		// Sleep a while before re-polling connected devices
-		nanosleep(&(struct timespec){1, 0}, NULL);
-
+		else
+		{
+			fprintf(stderr, "init_device failed: %s\n", XDTUSB_UtilErrorString(err));
+			return 1;
+		}
 	}
+	else
+	{
+		return 0;
+	}
+
+}
+
+int set_capture_settings(xdtusb_device_t* pdev, uint32_t exposure_us)
+{
+	// Configure Sequence
+	xdtusb_error_t err;
+	err = XDTUSB_DeviceSetSequenceModeParameters(
+		pdev, 
+		/*numFrames*/ 1, 
+		/*expTimeUs*/ exposure_us, 
+		/*numDummy*/ 0, 
+		/*expTimeDummy*/ 0
+	);
+	if (err != XDTUSB_ERROR_SUCCESS)
+	{
+		fprintf(stderr, "set_capture_settings failed: %s\n", XDTUSB_UtilErrorString(err));
+		return 1;
+	}
+	else
+	{
+		printf("Set capture settings successfully");
+		return 0;
+	}
+}
+
+int capture_frame(xdtusb_device_t* pdev)
+{
+	xdtusb_error_t err;
+
+	// Start Streaming mode
+	err = XDTUSB_DeviceStartStreaming(pdev, frame_cb, NULL);
+	if (err != XDTUSB_ERROR_SUCCESS)
+	{
+		fprintf(stderr, "DeviceStartStreaming failed: %s\n", XDTUSB_UtilErrorString(err));
+		return 1;
+	}
+	
+	// Issue SW trigger
+	XDTUSB_DeviceIssueSwTrigger(pdev);
+	if (err != XDTUSB_ERROR_SUCCESS)
+	{
+		fprintf(stderr, "SoftwareTrigger failed: %s\n", XDTUSB_UtilErrorString(err));
+		return 1;
+	}
+	
+	// Stop Streaming mode
+	XDTUSB_DeviceStopStreaming(pdev);
+	if (err != XDTUSB_ERROR_SUCCESS)
+	{
+		fprintf(stderr, "StopStreaming failed: %s\n", XDTUSB_UtilErrorString(err));
+		return 1;
+	}
+	else
+	{
+		printf("Captured frame successfully");
+		return 0;
+	}
+
+}
+
+int cleanup_capture_device(xdtusb_device_t* pdev)
+{
+	// Close device
+	xdtusb_error_t err;
+	err = XDTUSB_DeviceClose(pdev);
+	if (err != XDTUSB_ERROR_SUCCESS)
+	{
+		fprintf(stderr, "DeviceClose failed: %s\n", XDTUSB_UtilErrorString(err));
+		return 1;
+	}
+	else
+	{
+		printf("Captured frame successfully");
+		return 0;
+	}
+}
+
+void get_frame_data()
+{
+	printf("Getting frame data");
+}
+
+int main()
+{	
+	int err;
+
+	// Initialise  the device
+	xdtusb_device_t* pdev;
+	err = init_camera(pdev);
+	if (err != 0)
+	{
+		XDTUSB_Exit();
+		exit(EXIT_FAILURE);
+	}
+
+	// Configure capture settings 
+	uint32_t exposure_us = 100000;
+	err = set_capture_settings(pdev, exposure_us);
+	if (err != 0)
+	{
+		XDTUSB_Exit();
+		exit(EXIT_FAILURE);
+	}
+
+	// Capture frame
+	err = capture_frame(pdev);
+	if (err != 0)
+	{
+		XDTUSB_Exit();
+		exit(EXIT_FAILURE);
+	}
+
+	// Close device
+	err = cleanup_capture_device(pdev);
+	if (err != 0)
+	{
+		XDTUSB_Exit();
+		exit(EXIT_FAILURE);
+	}	
 
 	XDTUSB_Exit();
 
 	exit(EXIT_SUCCESS);
 }
+
 
 
 /* EOF */
