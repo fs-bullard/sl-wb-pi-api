@@ -69,6 +69,13 @@ void frame_cb(xdtusb_device_t* pdev, xdtusb_framebuf_t* pfb, void* puserargs)
 	// Store frame data 
 	// uint32_t frame_width = pframeDims->width;
 
+	// Trace out the first 16 pixels of the frame here
+	const uint32_t traceCount = 16;
+	for (uint32_t i = 0; i < (traceCount+(8-1))/8; i++) {
+		printf ("%04x: %04x %04x %04x %04x %04x %04x %04x %04x\n", i*16, pframeData[0], pframeData[1], pframeData[2], pframeData[3], pframeData[4], pframeData[5], pframeData[6], pframeData[7]);
+		pframeData += 8;
+	}
+
 }
 
 
@@ -135,7 +142,7 @@ int set_capture_settings(xdtusb_device_t* pdev, uint32_t exposure_us)
 	}
 	else
 	{
-		printf("Set capture settings successfully");
+		printf("Set capture settings successfully \n");
 		return 0;
 	}
 }
@@ -159,6 +166,8 @@ int capture_frame(xdtusb_device_t* pdev)
 		fprintf(stderr, "SoftwareTrigger failed: %s\n", XDTUSB_UtilErrorString(err));
 		return 1;
 	}
+
+	nanosleep(&(struct timespec){0, 10000000}, NULL);
 	
 	// Stop Streaming mode
 	err = XDTUSB_DeviceStopStreaming(pdev);
@@ -169,7 +178,7 @@ int capture_frame(xdtusb_device_t* pdev)
 	}
 	else
 	{
-		printf("Captured frame successfully");
+		printf("Captured frame successfully \n");
 		return 0;
 	}
 
@@ -187,14 +196,14 @@ int cleanup_capture_device(xdtusb_device_t* pdev)
 	}
 	else
 	{
-		printf("Cleaned up device successfully");
+		printf("Cleaned up device successfully \n");
 		return 0;
 	}
 }
 
 void get_frame_data()
 {
-	printf("Getting frame data");
+	printf("Getting frame data \n");
 }
 
 int main()
