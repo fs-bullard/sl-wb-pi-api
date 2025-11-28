@@ -203,7 +203,7 @@ int main()
 
 	// Initialise  the device
 	xdtusb_device_t* pdev;
-	err = init_camera(pdev);
+	err = init_device(pdev);
 	if (err != 0)
 	{
 		XDTUSB_Exit();
