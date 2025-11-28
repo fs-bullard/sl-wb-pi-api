@@ -37,7 +37,16 @@
 /*----------------------------------------------------------------------------*\
 	Local Variables
 \*----------------------------------------------------------------------------*/
+// Structure to hold captured frame data
+typedef struct {
+    uint8_t* data;           // Raw image bytes
+    uint32_t size;           // Size in bytes
+    uint32_t width;
+    uint32_t height;
+    volatile bool ready;     // Flag indicating data is ready
+} frame_buffer_t;
 
+static frame_buffer_t g_frame_buffer = {NULL, 0, 0, 0, false};
 /*----------------------------------------------------------------------------*\
 	API Variables
 \*----------------------------------------------------------------------------*/
@@ -66,16 +75,34 @@ void frame_cb(xdtusb_device_t* pdev, xdtusb_framebuf_t* pfb, void* puserargs)
 	printf("\nFrame received (h=%4u, w=%4u)\n", pframeDims->height, pframeDims->width);
 	printf("-------------------------------\n");
 
-	// Store frame data 
-	// uint32_t frame_width = pframeDims->width;
-
 	// Trace out the first 16 pixels of the frame here
 	const uint32_t traceCount = 16;
 	for (uint32_t i = 0; i < (traceCount+(8-1))/8; i++) {
 		printf ("%04x: %04x %04x %04x %04x %04x %04x %04x %04x\n", i*16, pframeData[0], pframeData[1], pframeData[2], pframeData[3], pframeData[4], pframeData[5], pframeData[6], pframeData[7]);
 		pframeData += 8;
 	}
+	
+	// Calculate frame size (assuming xdtusb_pixel_t is 2 bytes - uint16_t)
+    uint32_t pixel_count = pframeDims->width * pframeDims->height;
+    uint32_t frame_size = pixel_count * sizeof(xdtusb_pixel_t);
 
+    // Free old buffer if exists
+    if (g_frame_buffer.data != NULL) {
+        free(g_frame_buffer.data);
+    }
+
+    // Allocate new buffer and copy data
+    g_frame_buffer.data = (uint8_t*)malloc(frame_size);
+    if (g_frame_buffer.data != NULL) {
+        memcpy(g_frame_buffer.data, pframeData, frame_size);
+        g_frame_buffer.size = frame_size;
+        g_frame_buffer.width = pframeDims->width;
+        g_frame_buffer.height = pframeDims->height;
+        g_frame_buffer.ready = true;
+        printf("Frame data stored: %u bytes\n", frame_size);
+    } else {
+        fprintf(stderr, "Failed to allocate frame buffer\n");
+    }
 }
 
 
@@ -151,6 +178,9 @@ int capture_frame(xdtusb_device_t* pdev)
 {
 	xdtusb_error_t err;
 
+	// Clear previous frame
+	g_frame_buffer.ready = false;
+
 	// Start Streaming mode
 	err = XDTUSB_DeviceStartStreaming(pdev, frame_cb, NULL);
 	if (err != XDTUSB_ERROR_SUCCESS)
@@ -158,7 +188,7 @@ int capture_frame(xdtusb_device_t* pdev)
 		fprintf(stderr, "DeviceStartStreaming failed: %s\n", XDTUSB_UtilErrorString(err));
 		return 1;
 	}
-	
+
 	// Issue SW trigger
 	err = XDTUSB_DeviceIssueSwTrigger(pdev);
 	if (err != XDTUSB_ERROR_SUCCESS)
@@ -167,8 +197,19 @@ int capture_frame(xdtusb_device_t* pdev)
 		return 1;
 	}
 
-	nanosleep(&(struct timespec){0, 200000000}, NULL);
-	
+	// Wait for frame with timeout
+	int timeout_ms = 500;
+	while (!g_frame_buffer.ready && timeout_ms > 0) {
+		nanosleep(&(struct timespec){0, 10000000}, NULL);  // 10ms
+		timeout_ms -= 10;
+	}
+
+	if (!g_frame_buffer.ready) {
+		fprintf(stderr, "Timeout waiting for frame\n");
+		XDTUSB_DeviceStopStreaming(pdev);
+		return 1;
+	}
+
 	// Stop Streaming mode
 	err = XDTUSB_DeviceStopStreaming(pdev);
 	if (err != XDTUSB_ERROR_SUCCESS)
@@ -176,12 +217,9 @@ int capture_frame(xdtusb_device_t* pdev)
 		fprintf(stderr, "StopStreaming failed: %s\n", XDTUSB_UtilErrorString(err));
 		return 1;
 	}
-	else
-	{
-		printf("Captured frame successfully \n");
-		return 0;
-	}
 
+	printf("Captured frame successfully\n");
+	return 0;
 }
 
 int cleanup_capture_device(xdtusb_device_t* pdev)
@@ -201,9 +239,30 @@ int cleanup_capture_device(xdtusb_device_t* pdev)
 	}
 }
 
-void get_frame_data()
+int get_frame_data(uint8_t** data, uint32_t* size, uint32_t* width, uint32_t* height)
 {
 	printf("Getting frame data \n");
+
+	if (!g_frame_buffer.ready || g_frame_buffer.data == NULL) {
+        return 1;  // No frame available
+    }
+
+    *data = g_frame_buffer.data;
+    *size = g_frame_buffer.size;
+    *width = g_frame_buffer.width;
+    *height = g_frame_buffer.height;
+    
+    return 0;
+}
+
+void clear_frame_data()
+{
+    if (g_frame_buffer.data != NULL) {
+        free(g_frame_buffer.data);
+        g_frame_buffer.data = NULL;
+    }
+    g_frame_buffer.ready = false;
+    g_frame_buffer.size = 0;
 }
 
 int main()
@@ -236,13 +295,40 @@ int main()
 		exit(EXIT_FAILURE);
 	}
 
+	// Get frame data and verify it worked
+	uint8_t* data;
+	uint32_t size;
+	uint32_t width;
+	uint32_t height;
+	err = get_frame_data(&data, &size, &width, &height);
+	if (err != 0)
+	{
+		fprintf(stderr, "Failed to get frame data\n");
+		XDTUSB_Exit();
+		exit(EXIT_FAILURE);
+	}
+
+	// Print frame info to verify
+	printf("\n=== Frame Data Retrieved ===\n");
+	printf("Size: %u bytes\n", size);
+	printf("Dimensions: %u x %u\n", width, height);
+	printf("First 10 pixels: ");
+	uint16_t* pixels = (uint16_t*)data;
+	for (int i = 0; i < 10 && i < (int)(size/2); i++) {
+		printf("%04x ", pixels[i]);
+	}
+	printf("\n============================\n");
+
 	// Close device
 	err = cleanup_capture_device(pdev);
 	if (err != 0)
 	{
 		XDTUSB_Exit();
 		exit(EXIT_FAILURE);
-	}	
+	}
+
+	// Clean up frame buffer
+	clear_frame_data();
 
 	XDTUSB_Exit();
 
