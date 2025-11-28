@@ -15,7 +15,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include "xdtusb.h"
+#include "libraries/xdtusb.h"
 
 /*----------------------------------------------------------------------------*\
 	Constants
