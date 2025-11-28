@@ -2,7 +2,7 @@
  *
  * capture.c.
  *
- * Wrapper for lubxdtusb camera operations.
+ * Wrapper for libxdtusb camera operations.
  *
  */
 
@@ -67,12 +67,12 @@ void frame_cb(xdtusb_device_t* pdev, xdtusb_framebuf_t* pfb, void* puserargs)
 	printf("-------------------------------\n");
 
 	// Store frame data 
-	uint32_t frame_width = pframeDims->width;
+	// uint32_t frame_width = pframeDims->width;
 
 }
 
 
-int init_device(xdtusb_device_t* pdev)
+int init_device(xdtusb_device_t** ppdev)
 {
 	// Initialize libxdtusb
 	XDTUSB_Init();
@@ -83,24 +83,24 @@ int init_device(xdtusb_device_t* pdev)
 	XDTUSB_PollDevices(&numDevices, &devlist);
 
 	// If XDTUSB devices were found
-	if (numDevices > 1)
+	if (numDevices >= 1)
 	{
 
 		// Use first device found
-		xdtusb_device_t* pdev = devlist[0];
+		*ppdev = devlist[0];
 
 		// Open device
 		xdtusb_error_t err;
-		err = XDTUSB_DeviceOpen(pdev, 1);
-		if (err != XDTUSB_ERROR_SUCCESS)
+		err = XDTUSB_DeviceOpen(*ppdev, 1);
+		if (err == XDTUSB_ERROR_SUCCESS)
 		{
 			// Get some firmware information
 			xdtusb_fwinfo_t afp_fwinfo;
-			XDTUSB_DeviceGetAfpInfo(pdev, &afp_fwinfo);
+			XDTUSB_DeviceGetAfpInfo(*ppdev, &afp_fwinfo);
 			printf("AFP rev=0x%04X, build time=%02u-%02u-%04u %02u:%02u\n", afp_fwinfo.rev, afp_fwinfo.day, afp_fwinfo.month, afp_fwinfo.year, afp_fwinfo.hour, afp_fwinfo.minute);
 
 			// Set Acquisition Mode
-			XDTUSB_DeviceSetAcquisitionMode(pdev, XDT_ACQ_MODE_SEQ);
+			XDTUSB_DeviceSetAcquisitionMode(*ppdev, XDT_ACQ_MODE_SEQ);
 
 			return 0;
 		}
@@ -112,7 +112,7 @@ int init_device(xdtusb_device_t* pdev)
 	}
 	else
 	{
-		return 0;
+		return 1;
 	}
 
 }
@@ -153,7 +153,7 @@ int capture_frame(xdtusb_device_t* pdev)
 	}
 	
 	// Issue SW trigger
-	XDTUSB_DeviceIssueSwTrigger(pdev);
+	err = XDTUSB_DeviceIssueSwTrigger(pdev);
 	if (err != XDTUSB_ERROR_SUCCESS)
 	{
 		fprintf(stderr, "SoftwareTrigger failed: %s\n", XDTUSB_UtilErrorString(err));
@@ -161,7 +161,7 @@ int capture_frame(xdtusb_device_t* pdev)
 	}
 	
 	// Stop Streaming mode
-	XDTUSB_DeviceStopStreaming(pdev);
+	err = XDTUSB_DeviceStopStreaming(pdev);
 	if (err != XDTUSB_ERROR_SUCCESS)
 	{
 		fprintf(stderr, "StopStreaming failed: %s\n", XDTUSB_UtilErrorString(err));
@@ -187,7 +187,7 @@ int cleanup_capture_device(xdtusb_device_t* pdev)
 	}
 	else
 	{
-		printf("Captured frame successfully");
+		printf("Cleaned up device successfully");
 		return 0;
 	}
 }
@@ -203,7 +203,7 @@ int main()
 
 	// Initialise  the device
 	xdtusb_device_t* pdev;
-	err = init_device(pdev);
+	err = init_device(&pdev);
 	if (err != 0)
 	{
 		XDTUSB_Exit();
