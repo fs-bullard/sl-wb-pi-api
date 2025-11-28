@@ -167,7 +167,7 @@ int capture_frame(xdtusb_device_t* pdev)
 		return 1;
 	}
 
-	nanosleep(&(struct timespec){0, 10000000}, NULL);
+	nanosleep(&(struct timespec){0, 200000000}, NULL);
 	
 	// Stop Streaming mode
 	err = XDTUSB_DeviceStopStreaming(pdev);
