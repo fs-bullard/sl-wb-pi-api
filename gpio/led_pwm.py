@@ -13,7 +13,7 @@ class LED:
     
 
 if __name__ == '__main__':
-    led_pin = 17
+    led_pin = 22
     led = PWMLED(led_pin)
 
     while True:
