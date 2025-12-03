@@ -11,3 +11,5 @@ sleep(1)
 led_value = 1
 sleep(1)
 led_value = 0
+
+led.off()
