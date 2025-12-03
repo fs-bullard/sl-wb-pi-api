@@ -129,7 +129,7 @@ def initialize_device():
         return True
 
     logger.info("Initializing capture device...")
-    err = libcapture.init_device(device)
+    err = libcapture.init_device(byref(device))
 
     if err == 0:
         device_initialized = True
@@ -147,13 +147,15 @@ def set_capture_settings(exposure_ms: int):
         logger.info("Device not initialized")
         return False
 
-    err = libcapture.set_capture_settings(device, c_uint32(exposure_ms / 1000))
+    # Convert milliseconds to microseconds
+    exposure_us = exposure_ms * 1000
+    err = libcapture.set_capture_settings(device, c_uint32(exposure_us))
 
     if err == 0:
-        logger.info(f"Set exposure time to {exposure_ms}ms")
+        logger.info(f"Set exposure time to {exposure_ms}ms ({exposure_us}us)")
         return True
     else:
-        logger.error(f"Failed to set exposure time to {exposure_ms}")
+        logger.error(f"Failed to set exposure time to {exposure_ms}ms")
         return False
 
 def capture_frame():
@@ -253,12 +255,12 @@ def led_on():
             'status': 'error',
             'message': 'Device not initialized'
         }), 503
-    
+
     global led
     if led is not None:
         led.set_on(True)
 
-    jsonify({
+    return jsonify({
         'status': 'success',
         'message': 'LED turned on'
     }), 200
@@ -273,12 +275,12 @@ def led_off():
             'status': 'error',
             'message': 'Device not initialized'
         }), 503
-    
+
     global led
     if led is not None:
         led.set_on(False)
 
-    jsonify({
+    return jsonify({
         'status': 'success',
         'message': 'LED turned off'
     }), 200
