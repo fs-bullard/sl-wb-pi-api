@@ -1,67 +1,89 @@
 /**
  * capture.h
  *
- * Thread-safe C wrapper for libxdtusb camera operations.
- * Provides simple blocking capture interface for Flask integration.
+ * Wrapper for libxdtusb camera operations.
  */
 
 #ifndef CAPTURE_H
 #define CAPTURE_H
 
 #include <stdint.h>
-#include <stddef.h>
+#include "libraries/xdtusb.h"
 
 /**
  * Initialize the XDT USB capture device.
- * Opens device with 1 frame buffer for memory efficiency.
- *
- * Returns:
- *   0 on success
- *   -1 if no device found
- *   -2 if device open failed
- *   -3 if initialization failed
- */
-int init_capture_device(void);
-
-/**
- * Capture a single frame with specified exposure time.
- * Blocks until frame is received or timeout occurs.
+ * Initializes libxdtusb, polls for devices, opens the first device found,
+ * and sets acquisition mode.
  *
  * Args:
- *   exposure_ms: Exposure time in milliseconds (10-10000)
+ *   ppdev: Pointer to device pointer that will be set to opened device
  *
  * Returns:
  *   0 on success
- *   -1 if device not initialized
- *   -2 if capture configuration failed
- *   -3 if timeout (exposure_time + 10 seconds)
- *   -4 if streaming start failed
- *   -5 if trigger failed
- *
- * Thread-safe: Uses mutex and condition variable for synchronization
+ *   1 on failure (no device found or open failed)
  */
-int capture_frame(uint32_t exposure_ms);
+int init_device(xdtusb_device_t** ppdev);
+
+/**
+ * Configure capture settings for the device.
+ *
+ * Args:
+ *   pdev: Pointer to opened device
+ *   exposure_us: Exposure time in microseconds
+ *
+ * Returns:
+ *   0 on success
+ *   1 on failure
+ */
+int set_capture_settings(xdtusb_device_t* pdev, uint32_t exposure_us);
+
+/**
+ * Capture a single frame.
+ * Starts streaming, issues software trigger, waits for frame callback,
+ * and stops streaming.
+ *
+ * Args:
+ *   pdev: Pointer to opened device
+ *
+ * Returns:
+ *   0 on success
+ *   1 on failure (timeout or streaming error)
+ */
+int capture_frame(xdtusb_device_t* pdev);
 
 /**
  * Get captured frame data and metadata.
  * Must be called after successful capture_frame().
  *
  * Args:
+ *   data: Pointer to store frame data pointer (caller should not free)
+ *   size: Pointer to store total data size in bytes
  *   width: Pointer to store frame width
  *   height: Pointer to store frame height
- *   pixel_size: Pointer to store bytes per pixel (always 2 for uint16_t)
- *   data: Pointer to store frame data pointer (do not free!)
- *   size: Pointer to store total data size in bytes
  *
- * Note: Data pointer is valid until next capture_frame() call
+ * Returns:
+ *   0 on success
+ *   1 if no frame available
+ *
+ * Note: Data pointer is valid until next capture_frame() or clear_frame_data() call
  */
-void get_frame_data(uint32_t* width, uint32_t* height, uint32_t* pixel_size,
-                    uint8_t** data, size_t* size);
+int get_frame_data(uint8_t** data, uint32_t* size, uint32_t* width, uint32_t* height);
 
 /**
- * Cleanup and release capture device resources.
- * Should be called on application exit.
+ * Free frame buffer and clear frame data.
  */
-void cleanup_capture_device(void);
+void clear_frame_data(void);
+
+/**
+ * Cleanup and close capture device.
+ *
+ * Args:
+ *   pdev: Pointer to opened device
+ *
+ * Returns:
+ *   0 on success
+ *   1 on failure
+ */
+int cleanup_capture_device(xdtusb_device_t* pdev);
 
 #endif /* CAPTURE_H */
