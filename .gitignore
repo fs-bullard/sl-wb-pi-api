@@ -217,4 +217,3 @@ libcapture.so
 *.raw
 *.tif
 *.tiff
-test_*
