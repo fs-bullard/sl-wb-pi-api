@@ -20,6 +20,7 @@ from ctypes import (
     byref
 )
 from pathlib import Path
+import gzip
 
 from flask import Flask, request, jsonify, Response
 
@@ -303,6 +304,7 @@ def capture():
             - X-Frame-Height: Frame height in pixels
             - X-Pixel-Size: Bytes per pixel (2)
             - X-Exposure-Ms: Exposure time in ms
+            - X-LED: led value
             - Content-Type: application/octet-stream
     """
     if not device_initialized:
@@ -410,9 +412,10 @@ def capture():
             'message': f'Failed to get frame data: {str(e)}'
         }), 500
 
-    # Copy frame data to Python bytes
+    # Copy frame data to Python bytes and compress
     try:
         frame_bytes = bytes(data_ptr[:data_size.value])
+        compressed_bytes = gzip.compress(frame_bytes, compresslevel=1)
     except Exception as e:
         logger.error(f"Exception copying frame data: {e}", exc_info=True)
         return jsonify({
@@ -423,10 +426,11 @@ def capture():
     logger.info(f"Frame captured: {width.value}x{height.value}, {data_size.value} bytes")
 
     # Create response with binary data
-    response = Response(frame_bytes, mimetype='application/octet-stream')
+    response = Response(compressed_bytes, mimetype='application/octet-stream')
     response.headers['X-Frame-Width'] = str(width.value)
     response.headers['X-Frame-Height'] = str(height.value)
     response.headers['X-Exposure-Ms'] = str(exposure_ms)
+    response.headers['X-LED'] = str(led_val)
 
     return response
 
