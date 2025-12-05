@@ -6,9 +6,11 @@ class LED:
         self.led = PWMLED(pin)
         self.val = val
 
-    def set_on(self, on: bool):
+    def set_on(self, on: bool, val: float | None = None):
         if on:
             self.led.on()
+            if val is not None:
+                self.set_val(val)
         else:
             self.led.off()
 
@@ -38,5 +40,3 @@ if __name__ == '__main__':
         val = float(input('Enter value: ').strip())
         print(f'Setting val to {val}')
         led.set_val(val)
-
-
