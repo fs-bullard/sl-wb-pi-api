@@ -45,8 +45,8 @@ device = c_voidp()
 
 # GPIO devices
 try:
-    led = LED(14)
-    button_led = ButtonLED(15, 16)
+    led = LED(22)
+    # button_led = ButtonLED(15, 16)
 except Exception as e:
     logger.error(f"Error connecting to GPIO devices: {e}")
     led = None
