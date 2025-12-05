@@ -377,7 +377,7 @@ def capture():
     width = c_uint32()
     height = c_uint32()
     data_ptr = POINTER(c_uint8)()
-    data_size = c_size_t()
+    data_size = c_uint32()
 
     try:
         rtn = get_frame_data(
