@@ -258,7 +258,7 @@ def led_on():
 
     global led
     if led is not None:
-        led.set_on(True)
+        led.set_on(True, 0.01)
 
     return jsonify({
         'status': 'success',
@@ -293,6 +293,7 @@ def capture():
     Request JSON:
         {
             "exposure_ms": 1000  # Required: 10-10000 ms
+            "led": 0.01 # Required: 0-1.0 
         }
 
     Response:
@@ -319,6 +320,7 @@ def capture():
         }), 400
 
     exposure_ms = data['exposure_ms']
+    led_val = data['led']
 
     # Validate exposure time
     if not isinstance(exposure_ms, (int, float)):
@@ -333,6 +335,18 @@ def capture():
         return jsonify({
             'status': 'error',
             'message': f'exposure_ms must be between {EXPOSURE_MIN} and {EXPOSURE_MAX}'
+        }), 400
+    
+    # Apply LED setting
+    global led
+    if led_val is None:
+        pass
+    elif isinstance(led_val, (float)) and 0 <= led_val <= 1:
+        led.set_on(True, led_val)
+    else:
+        return jsonify({
+            'status': 'error',
+            'message': f'led_val must be between {0} and {1}'
         }), 400
     
     # Set capture settings
@@ -365,6 +379,8 @@ def capture():
             'status': 'error',
             'message': f'C library error: {str(e)}'
         }), 500
+    finally:
+        led.set_on(False)
 
     if not ret:
         logger.error(f"Capture failed")
