@@ -23,7 +23,7 @@ class LED:
 if __name__ == '__main__':
     led_pin = 22
     led = LED(led_pin)
-    led.on()
+    led.set_on(True)
 
     dv = 0.1
 
