@@ -15,18 +15,20 @@ class LED:
 if __name__ == '__main__':
     led_pin = 22
     led = PWMLED(led_pin)
+    led.on()
+
+    dv = 0.1
+
+    val = 1
+    while val >= 0:
+        print(val)
+        led.value = val
+        val -= dv 
+        sleep(0.1)
 
     while True:
-        led.on()
+        val = float(input('Enter value: ').strip())
+        print(f'Setting val to {val}')
+        led.value = val
 
-        led.value = 1
-        sleep(1)
-        led.value = 0.5
-        sleep(1)
-        led_value = 1
-        sleep(1)
-        led_value = 0
-        sleep(1)
-
-        led.off()
 
