@@ -431,6 +431,7 @@ def capture():
     response.headers['X-Frame-Height'] = str(height.value)
     response.headers['X-Exposure-Ms'] = str(exposure_ms)
     response.headers['X-LED'] = str(led_val)
+    response.headers['Content-Encoding'] = 'gzip'
 
     return response
 
