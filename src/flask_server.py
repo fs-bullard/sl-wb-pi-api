@@ -112,7 +112,7 @@ def capture():
     logger.info(f"Capturing frame with exposure: {exposure_ms} ms")
 
     try:
-        data = Device.capture_frame(exposure_ms)
+        data = device.capture_frame(exposure_ms)
         logger.info(f"capture_frame returned")
     except Exception as e:
         logger.error(f"Exception in capture_frame: {e}", exc_info=True)
