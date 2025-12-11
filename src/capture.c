@@ -143,7 +143,7 @@ void callback(
         }
     }
     
-    pthread_cond_broadcast(&callback_data->cond)
+    pthread_cond_broadcast(&callback_data->cond);
 
     XDTUSB_FramebufCommit(frame_buffer);
 }
