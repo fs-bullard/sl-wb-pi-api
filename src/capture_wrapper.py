@@ -70,21 +70,28 @@ class Device:
         self.width = c_w.value
         self.height = c_h.value
 
+        print(f"width: {self.width}, height: {self.height}")
+
     def capture_frame(self, exposure_ms: int):
         """
         Docstring for capture_frame
         
         :param self: Description
         """
+        print(f"capture_frame called")
         # Check that self.width and self.height are valid
         
         # Define buffer
         frame_buffer = np.empty(
             shape=(self.width * self.height, 1)).astype(np.uint16)
         
+        print('buffer defined')
+        
         # Get pointer to first element in buffer
         frame_buffer_ptr = frame_buffer.ctypes.data_as(
             ctypes.POINTER(ctypes.c_uint16))
+        
+        print('buffer pointer found')
         
         # Call capture_frame function
         err = _libcapture.capture_frame(
@@ -95,6 +102,8 @@ class Device:
         )
         self._check_error(err)
 
+        print('frame captured')
+
         return frame_buffer
     
     def close_device(self):
@@ -104,5 +113,7 @@ class Device:
         if err != 0:
             logger.error("Placeholder")
             raise DeviceError(err)
+        else:
+            print('No error')
         
 
