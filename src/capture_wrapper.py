@@ -38,8 +38,8 @@ _libcapture.close_device.argtypes = [
 
 _libcapture.get_frame_dims.argtypes = [
     ctypes.c_void_p,
-    ctypes.POINTER(ctypes.c_uint_16),
-    ctypes.POINTER(ctypes.c_uint_16)
+    ctypes.POINTER(ctypes.c_uint16),
+    ctypes.POINTER(ctypes.c_uint16)
 ]
 
 _libcapture.capture_frame.argtypes = [
