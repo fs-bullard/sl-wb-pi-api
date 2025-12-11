@@ -132,7 +132,7 @@ void callback(
     
     if (err == XDTUSB_ERROR_SUCCESS) {
         xdtusb_pixel_t* temp_frame_data;
-        err = XDTUSB_FramebufGetData(frame_buffer, temp_frame_data);
+        err = XDTUSB_FramebufGetData(frame_buffer, &temp_frame_data);
 
         if (err == XDTUSB_ERROR_SUCCESS) {
             if (callback_data->length >= frame_dimensions->width * frame_dimensions->height) {
