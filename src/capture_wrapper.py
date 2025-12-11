@@ -57,10 +57,6 @@ class Device:
         # Device pointer
         self._handle = ctypes.c_void_p()
 
-        # Call init device
-        err = _libcapture.init_device(ctypes.byref(self._handle))
-        self._check_error(err)
-
         err = _libcapture.open_device(ctypes.byref(self._handle))
         self._check_error(err)
 
