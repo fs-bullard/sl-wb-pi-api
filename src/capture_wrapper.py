@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def _get_path():
     # Find libcapture.so
-    lib_path = Path(__file__).parent / "libcapture.so"
+    lib_path = Path(__file__).parent.parent / "libcapture.so"
     if not lib_path.exists():
         raise FileNotFoundError(
             f"libcapture.so not found. Please run 'make' to build it.")
