@@ -60,8 +60,8 @@ class Device:
         err = _libcapture.open_device(ctypes.byref(self._handle))
         self._check_error(err)
 
-        c_w = ctypes.c_int16()
-        c_h = ctypes.c_int16()
+        c_w = ctypes.c_uint16()
+        c_h = ctypes.c_uint16()
 
         err = _libcapture.get_frame_dims(self._handle, ctypes.byref(c_w), 
                                          ctypes.byref(c_h))
