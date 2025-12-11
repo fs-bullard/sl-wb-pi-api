@@ -56,7 +56,7 @@ int get_frame_dims(xdtusb_device_t* handle, uint16_t* width, uint16_t* height){
         return 1;
     }
 
-    xdtusb_error_t err = XDTUSB_DeviceFpgaRegisterRead(handle, HEIGHT_ADDRESS, height);
+    err = XDTUSB_DeviceFpgaRegisterRead(handle, HEIGHT_ADDRESS, height);
     if (err != XDTUSB_ERROR_SUCCESS) {
         return 1;
     }
