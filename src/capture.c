@@ -70,7 +70,12 @@ int capture_frame(
     uint16_t* buffer,
     uint32_t length
 ){
-    xdtusb_error_t err = XDTUSB_DeviceSetSequenceModeParameters(
+    xdtusb_error_t err = XDTUSB_DeviceSetAcquisitionMode(handle, XDT_ACQ_MODE_SEQ);
+    if (err != XDTUSB_ERROR_SUCCESS) {
+        return 1;
+    }
+
+    err = XDTUSB_DeviceSetSequenceModeParameters(
         handle,
         1,
         (uint32_t)exposure_ms * 1000,
