@@ -70,12 +70,10 @@ int capture_frame(
     uint16_t* buffer,
     uint32_t length
 ){
-    // Set exposure time
-    uint32_t exposure_us = exposure_ms * 1000; 
     xdtusb_error_t err = XDTUSB_DeviceSetSequenceModeParameters(
         handle,
         1,
-        exposure_us,
+        (uint32_t)exposure_ms * 1000,
         0,
         0
     );
