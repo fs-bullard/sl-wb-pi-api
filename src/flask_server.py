@@ -200,7 +200,7 @@ def main():
         app.run(
             host='0.0.0.0',
             port=5000,
-            debug=False,
+            debug=True,
             threaded=False  # Single-threaded for Pi Zero resource constraints
         )
 
