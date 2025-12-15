@@ -10,8 +10,8 @@
 typedef struct callback_data{
     uint16_t* buffer;
     uint32_t length;
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
+    pthread_mutex_t* mutex;
+    pthread_cond_t* cond;
 } callback_data;
 
 static void callback(
@@ -91,8 +91,8 @@ int capture_frame(
     callback_data callback_data;
     callback_data.buffer = buffer;
     callback_data.length = length;
-    callback_data.mutex = mutex;
-    callback_data.cond = cond;
+    callback_data.mutex = &mutex;
+    callback_data.cond = &cond;
 
     // Start streaming
     err = XDTUSB_DeviceStartStreaming(handle, (xdtusb_frame_cb_t)callback, &callback_data);
@@ -111,7 +111,6 @@ int capture_frame(
     pthread_mutex_lock(&mutex);
     pthread_cond_wait(&cond, &mutex);
     pthread_mutex_unlock(&mutex);
-    
     
     // Stop streaming
     err = XDTUSB_DeviceStopStreaming(handle);
@@ -136,14 +135,14 @@ void callback(
 
         if (err == XDTUSB_ERROR_SUCCESS) {
             if (callback_data->length >= frame_dimensions->width * frame_dimensions->height) {
-                pthread_mutex_lock(&callback_data->mutex);
+                pthread_mutex_lock(callback_data->mutex);
                 memcpy(callback_data->buffer, temp_frame_data, callback_data->length * sizeof(uint16_t));
-                pthread_mutex_unlock(&callback_data->mutex);
+                pthread_mutex_unlock(callback_data->mutex);
             }
         }
     }
-    
-    pthread_cond_broadcast(&callback_data->cond);
+
+    pthread_cond_broadcast(callback_data->cond);
 
     XDTUSB_FramebufCommit(frame_buffer);
 }
