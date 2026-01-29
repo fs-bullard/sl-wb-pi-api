@@ -6,6 +6,7 @@ Provides HTTP interface for laptop to request camera captures via C library.
 Optimized for Pi Zero 2W with minimal resource usage.
 """
 
+import os
 import sys
 import logging
 import signal
@@ -195,6 +196,13 @@ def shutdown():
         'status': 'success',
         'message': 'Device shutdown complete'
     }), 200
+
+@app.route('/power_off', methods=['POST'])
+def power_off():
+    """
+    Safely power off the Pi
+    """
+    os.system('sudo shutdown now')
 
 
 def signal_handler(sig, frame):
