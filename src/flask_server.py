@@ -31,22 +31,44 @@ app = Flask(__name__)
 # Global C library handle
 libcapture = None
 
-# Global device
-device = Device()
-
-# GPIO devices
-try:
-    led = LED(22)
-    # button_led = ButtonLED(15, 16)
-except Exception as e:
-    logger.error(f"Error connecting to GPIO devices: {e}")
-    led = None
-    button_led = None
-
 # Constants
 EXPOSURE_MIN = 10
 EXPOSURE_MAX = 10000
 DEFAULT_EXPOSURE = 100
+
+# Global initialised flag
+initialised = False
+
+device = None
+
+@app.route('/init', methods=['POST'])
+def init():
+    """
+    Init device for capture
+
+    Response:
+        200: Init successful
+    """
+    global device
+    device = Device()
+
+    # GPIO devices
+    try:
+        led = LED(22)
+        # button_led = ButtonLED(15, 16)
+    except Exception as e:
+        logger.error(f"Error connecting to GPIO devices: {e}")
+        led = None
+        button_led = None
+
+    initialised = True
+
+    return jsonify({
+        'status': 'success',
+        'message': 'Device initialisation complete'
+    }), 200
+
+
 
 @app.route('/capture', methods=['POST'])
 def capture():
@@ -159,6 +181,9 @@ def shutdown():
     logger.info("Shutting down device...")
 
     device.close_device()
+    device = None
+    global initialised
+    initialised = False
 
     return jsonify({
         'status': 'success',
@@ -192,7 +217,6 @@ def main():
         # Start Flask server (single-threaded for Pi Zero)
         logger.info("Starting Flask server on 0.0.0.0:5000")
         logger.info("Endpoints:")
-        logger.info("  GET  /health   - Check device status")
         logger.info("  POST /capture  - Capture image")
         logger.info("  POST /shutdown - Shutdown device")
         logger.info("=" * 60)
