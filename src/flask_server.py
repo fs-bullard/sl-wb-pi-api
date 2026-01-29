@@ -39,6 +39,7 @@ DEFAULT_EXPOSURE = 100
 # Global initialised flag
 initialised = False
 
+# Global device 
 device = None
 
 @app.route('/init', methods=['POST'])
@@ -50,6 +51,8 @@ def init():
         200: Init successful
     """
     global device
+    global initialised
+
     device = Device()
 
     # GPIO devices
@@ -91,6 +94,8 @@ def capture():
             - X-LED: led value
             - Content-Type: application/octet-stream
     """
+    global device
+    global initialised
 
     # Parse request
     data = request.get_json()
@@ -177,12 +182,13 @@ def shutdown():
     Response:
         200: Shutdown successful
     """
+    global device
+    global initialised
 
     logger.info("Shutting down device...")
 
     device.close_device()
     device = None
-    global initialised
     initialised = False
 
     return jsonify({
@@ -194,9 +200,6 @@ def shutdown():
 def signal_handler(sig, frame):
     """Handle shutdown signals gracefully."""
     logger.info(f"Received signal {sig}, shutting down...")
-
-    # if device_initialized:
-    #     libcapture.cleanup_capture_device()
 
     sys.exit(0)
 
