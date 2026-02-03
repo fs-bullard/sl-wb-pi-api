@@ -60,7 +60,7 @@ int read_register(xdtusb_device_t* handle, uint16_t adr, uint16_t* val){
 }
 
 int write_register(xdtusb_device_t* handle, uint16_t adr, uint16_t val){
-    xdtusb_error_t err = XDTUSB_DeviceFpgaRegisterWrite(handle, adr, val)
+    xdtusb_error_t err = XDTUSB_DeviceFpgaRegisterWrite(handle, adr, val);
     if (err != XDTUSB_ERROR_SUCCESS) {
             return 1;
         }
