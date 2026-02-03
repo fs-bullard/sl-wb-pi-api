@@ -24,7 +24,6 @@ exposure_ms = 100
 # Capture frame
 print(f"Capturing frame with exposure: {exposure_ms} ms")
 
-time.sleep(1)
 data = device.capture_frame(exposure_ms)
 print(f"capture_frame returned")
 
