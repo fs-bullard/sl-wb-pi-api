@@ -81,13 +81,6 @@ class Device:
                                          ctypes.byref(c_h))
         self._check_error(err)
 
-        num = ctypes.c_uint16()
-
-        err = _libcapture.get_register_381(self._handle, ctypes.byref(num))
-        self._check_error(err)
-
-        logger.info(f'Register 381: {num}')
-
         self.width = c_w.value
         self.height = c_h.value
 
