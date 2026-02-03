@@ -51,7 +51,7 @@ void close_device(xdtusb_device_t* handle){
 }
 // 381
 int get_register_381(xdtusb_device_t* handle, uint16_t* num){
-    xdtusb_error_t err = XDTUSB_DeviceFpgaRegisterRead(handle, 381, num);
+    xdtusb_error_t err = XDTUSB_DeviceFpgaRegisterRead(handle, 425, num);
     if (err != XDTUSB_ERROR_SUCCESS) {
         return 1;
     }
