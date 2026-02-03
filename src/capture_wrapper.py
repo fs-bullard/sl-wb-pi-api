@@ -104,6 +104,8 @@ class Device:
 
         logger.info('Frame captured')
 
+        logger.debug(f'Captured image statistics: \n min: {np.min(frame_buffer)} \n max: {np.max(frame_buffer)}')
+
         return frame_buffer
     
     def close_device(self):
