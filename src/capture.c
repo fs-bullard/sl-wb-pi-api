@@ -49,6 +49,15 @@ void close_device(xdtusb_device_t* handle){
 
     XDTUSB_Exit();
 }
+// 381
+int get_register_381(xdtusb_device_t* handle, uint16_t* num){
+    xdtusb_error_t err = XDTUSB_DeviceFpgaRegisterRead(handle, 381, num);
+    if (err != XDTUSB_ERROR_SUCCESS) {
+        return 1;
+    }
+
+    return 0;
+}
 
 int get_frame_dims(xdtusb_device_t* handle, uint16_t* width, uint16_t* height){
     xdtusb_error_t err = XDTUSB_DeviceFpgaRegisterRead(handle, WIDTH_ADDRESS, width);

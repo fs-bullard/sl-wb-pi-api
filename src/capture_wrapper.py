@@ -42,6 +42,12 @@ _libcapture.get_frame_dims.argtypes = [
     ctypes.POINTER(ctypes.c_uint16)
 ]
 
+_libcapture.get_register_381.argtypes = [
+    ctypes.c_void_p,
+    ctypes.POINTER(ctypes.c_uint16),
+]
+
+
 _libcapture.capture_frame.argtypes = [
     ctypes.c_void_p,
     ctypes.c_uint16,                    # Exposure time (ms)
@@ -66,6 +72,13 @@ class Device:
         err = _libcapture.get_frame_dims(self._handle, ctypes.byref(c_w), 
                                          ctypes.byref(c_h))
         self._check_error(err)
+
+        num = ctypes.c_uint16()
+
+        err = _libcapture.get_register_381(self._handle, ctypes.byref(num))
+        self._check_error(err)
+
+        logger.debug(f'Register 381: {num}')
 
         self.width = c_w.value
         self.height = c_h.value
