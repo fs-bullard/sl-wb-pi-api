@@ -16,8 +16,9 @@ void close_device(xdtusb_device_t* handle);
 
 int get_frame_dims(xdtusb_device_t* handle, uint16_t* width, uint16_t* height);
 
-int get_register_381(xdtusb_device_t* handle, uint16_t* num);
+int read_register(xdtusb_device_t* handle, uint16_t* adr, uint16_t* val);
 
+int write_register(xdtusb_device_t* handle, uint16_t* adr, uint16_t val);
 
 int capture_frame(
     xdtusb_device_t* handle,

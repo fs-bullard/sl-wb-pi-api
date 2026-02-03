@@ -42,11 +42,17 @@ _libcapture.get_frame_dims.argtypes = [
     ctypes.POINTER(ctypes.c_uint16)
 ]
 
-_libcapture.get_register_381.argtypes = [
+_libcapture.read_register.argtypes = [
     ctypes.c_void_p,
-    ctypes.POINTER(ctypes.c_uint16),
+    ctypes.c_uint16,
+    ctypes.POINTER(ctypes.c_uint16)
 ]
 
+_libcapture.write_register.argtypes = [
+    ctypes.c_void_p,
+    ctypes.c_uint16,
+    ctypes.c_uint16
+]
 
 _libcapture.capture_frame.argtypes = [
     ctypes.c_void_p,
@@ -66,6 +72,8 @@ class Device:
         err = _libcapture.open_device(ctypes.byref(self._handle))
         self._check_error(err)
 
+        self._disable_dds()
+
         c_w = ctypes.c_uint16()
         c_h = ctypes.c_uint16()
 
@@ -84,6 +92,10 @@ class Device:
         self.height = c_h.value
 
         print(f"width: {self.width}, height: {self.height}")
+
+    def _disable_dds(self):
+        err = _libcapture.write_register(self._handle, 425, 0)
+        self._check_error(err)
 
     def capture_frame(self, exposure_ms: int):
         """
