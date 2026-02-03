@@ -34,10 +34,10 @@ compressed_bytes = gzip.compress(frame_bytes, compresslevel=1)
 
 
 img_from_bytes = np.frombuffer(frame_bytes, dtype=np.uint16).reshape((1536, 1031))
-img_from_comp_bytes = np.frombuffer(compressed_bytes, dtype=np.uint16).reshape((1536, 1031))
+# img_from_comp_bytes = np.frombuffer(compressed_bytes, dtype=np.uint16).reshape((1536, 1031))
 
 print(f'uncompressed: {np.min(img_from_bytes), np.max(img_from_bytes)}')
-print(f'compressed: {np.min(img_from_comp_bytes), np.max(img_from_comp_bytes)}')
+# print(f'compressed: {np.min(img_from_comp_bytes), np.max(img_from_comp_bytes)}')
 
 
 print(f"Frame captured: {len(data)} bytes")
