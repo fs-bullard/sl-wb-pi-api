@@ -78,7 +78,7 @@ class Device:
         err = _libcapture.get_register_381(self._handle, ctypes.byref(num))
         self._check_error(err)
 
-        logger.debug(f'Register 381: {num}')
+        logger.info(f'Register 381: {num}')
 
         self.width = c_w.value
         self.height = c_h.value
