@@ -83,7 +83,7 @@ class Device:
         
         # Define buffer
         frame_buffer = np.empty(
-            shape=(self.width * self.height, 1)).astype(np.uint16)
+            shape=(self.width * self.height, 1), dtype=np.uint16)
         
         logger.info('Buffer defined')
         
