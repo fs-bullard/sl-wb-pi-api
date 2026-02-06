@@ -1,10 +1,5 @@
-import RPi.GPIO as GPIO
 from gpiozero import LED
 
-
-GPIO.setmode(GPIO.BOARD)
-
-GPIO.setup(13, GPIO.IN)
 
 led = LED(17)
 strip = LED(22)

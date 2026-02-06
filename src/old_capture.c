@@ -1,294 +1,345 @@
-/**
- * capture.c
+/** \file
  *
- * Thread-safe wrapper for libxdtusb camera operations.
- * Implements blocking capture with single frame buffer for Pi Zero 2W.
+ * old_capture.c.
+ *
+ * Wrapper for libxdtusb camera operations.
+ *
  */
 
-#include "capture.h"
-#include "../libraries/xdtusb.h"
 
+/*----------------------------------------------------------------------------*\
+	Headers
+\*----------------------------------------------------------------------------*/
+#include <time.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
-#include <errno.h>
-#include <pthread.h>
 
-/* Global device handle (single frame only) */
-static xdtusb_device_t* g_device = NULL;
-static int g_initialized = 0;
+#include "libraries/xdtusb.h"
 
-/* Frame data storage (pre-allocated buffer) */
-static uint32_t g_frame_width = 0;
-static uint32_t g_frame_height = 0;
-static uint32_t g_pixel_size = 2; /* uint16_t pixels */
-static uint8_t* g_frame_data = NULL;
-static size_t g_frame_capacity = 0; /* Allocated buffer size */
-static size_t g_frame_size = 0;    /* Actual frame size */
+/*----------------------------------------------------------------------------*\
+	Constants
+\*----------------------------------------------------------------------------*/
 
-/* Synchronization primitives for blocking capture */
-static pthread_mutex_t g_capture_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t g_capture_cond = PTHREAD_COND_INITIALIZER;
-static int g_frame_ready = 0;
+/*----------------------------------------------------------------------------*\
+	Macros
+\*----------------------------------------------------------------------------*/
+#define NUM_FRAME_BUFS 10
 
-/**
- * Frame callback - called by libxdtusb when frame is received.
- * Simplified to match working example - minimal error checking, no allocation.
- */
-static void frame_callback(xdtusb_device_t* pdev, xdtusb_framebuf_t* pfb, void* puserargs)
+/*----------------------------------------------------------------------------*\
+	Types
+\*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*\
+	Local Prototypes
+\*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*\
+	Local Variables
+\*----------------------------------------------------------------------------*/
+// Structure to hold captured frame data
+typedef struct {
+    uint8_t* data;           // Raw image bytes
+    uint32_t size;           // Size in bytes
+    uint32_t width;
+    uint32_t height;
+    volatile bool ready;     // Flag indicating data is ready
+} frame_buffer_t;
+
+static frame_buffer_t g_frame_buffer = {NULL, 0, 0, 0, false};
+/*----------------------------------------------------------------------------*\
+	API Variables
+\*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*\
+	API Functions
+\*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------*\
+	Local Functions
+\*----------------------------------------------------------------------------*/
+
+// Frame received callback
+void frame_cb(xdtusb_device_t* pdev, xdtusb_framebuf_t* pfb, void* puserargs)
 {
-    (void)pdev;      /* Unused - we use global g_device */
-    (void)puserargs; /* Unused - no user data needed */
+	// Extract image information and data
+	// Get actual image dimensions
+	xdtusb_frame_dimensions_t* pframeDims;
+	XDTUSB_FramebufGetDimensions(pfb, &pframeDims);
 
-    /* Get frame dimensions */
-    xdtusb_frame_dimensions_t* pframeDims;
-    XDTUSB_FramebufGetDimensions(pfb, &pframeDims);
+	// Get frames image data
+	xdtusb_pixel_t* pframeData;
+	XDTUSB_FramebufGetData(pfb, &pframeData);
 
-    /* Get frame data pointer */
-    xdtusb_pixel_t* pframeData;
-    XDTUSB_FramebufGetData(pfb, &pframeData);
+	// For simplicity just output some frame information
+	printf("\nFrame received (h=%4u, w=%4u)\n", pframeDims->height, pframeDims->width);
+	printf("-------------------------------\n");
 
-    pthread_mutex_lock(&g_capture_mutex);
+	// Trace out the first 16 pixels of the frame here
+	const uint32_t traceCount = 16;
+	for (uint32_t i = 0; i < (traceCount+(8-1))/8; i++) {
+		printf ("%04x: %04x %04x %04x %04x %04x %04x %04x %04x\n", i*16, pframeData[0], pframeData[1], pframeData[2], pframeData[3], pframeData[4], pframeData[5], pframeData[6], pframeData[7]);
+		pframeData += 8;
+	}
+	
+	// Calculate frame size (assuming xdtusb_pixel_t is 2 bytes - uint16_t)
+    uint32_t pixel_count = pframeDims->width * pframeDims->height;
+    uint32_t frame_size = pixel_count * sizeof(xdtusb_pixel_t);
 
-    /* Store frame metadata */
-    g_frame_width = pframeDims->width;
-    g_frame_height = pframeDims->height;
-    g_frame_size = g_frame_width * g_frame_height * sizeof(xdtusb_pixel_t);
+    // Free old buffer if exists
+    if (g_frame_buffer.data != NULL) {
+        free(g_frame_buffer.data);
+    }
 
-    /* Verify buffer is large enough (should be pre-allocated) */
-    if (g_frame_data != NULL && g_frame_size <= g_frame_capacity) {
-        /* Copy frame data to pre-allocated buffer */
-        memcpy(g_frame_data, pframeData, g_frame_size);
-
-        /* Signal that frame is ready */
-        g_frame_ready = 1;
-        pthread_cond_signal(&g_capture_cond);
+    // Allocate new buffer and copy data
+    g_frame_buffer.data = (uint8_t*)malloc(frame_size);
+    if (g_frame_buffer.data != NULL) {
+        memcpy(g_frame_buffer.data, pframeData, frame_size);
+        g_frame_buffer.size = frame_size;
+        g_frame_buffer.width = pframeDims->width;
+        g_frame_buffer.height = pframeDims->height;
+        g_frame_buffer.ready = true;
+        printf("Frame data stored: %u bytes\n", frame_size);
     } else {
-        fprintf(stderr, "Frame buffer not allocated or too small (%zu > %zu)\n",
-                g_frame_size, g_frame_capacity);
+        fprintf(stderr, "Failed to allocate frame buffer\n");
     }
-
-    pthread_mutex_unlock(&g_capture_mutex);
-
-    /* Commit frame buffer back to device */
-    XDTUSB_FramebufCommit(pfb);
 }
 
-int init_capture_device(void)
+
+int init_device(xdtusb_device_t** ppdev)
 {
-    xdtusb_error_t err;
+	// Initialize libxdtusb
+	XDTUSB_Init();
+	
+	// Poll devices
+	uint8_t numDevices;
+	xdtusb_device_t** devlist;
+	XDTUSB_PollDevices(&numDevices, &devlist);
 
-    if (g_initialized) {
-        fprintf(stderr, "Device already initialized\n");
-        return 0;
+	// If XDTUSB devices were found
+	if (numDevices >= 1)
+	{
+
+		// Use first device found
+		*ppdev = devlist[0];
+
+		// Open device
+		xdtusb_error_t err;
+		err = XDTUSB_DeviceOpen(*ppdev, 1);
+		if (err == XDTUSB_ERROR_SUCCESS)
+		{
+			// Get some firmware information
+			xdtusb_fwinfo_t afp_fwinfo;
+			XDTUSB_DeviceGetAfpInfo(*ppdev, &afp_fwinfo);
+			printf("AFP rev=0x%04X, build time=%02u-%02u-%04u %02u:%02u\n", afp_fwinfo.rev, afp_fwinfo.day, afp_fwinfo.month, afp_fwinfo.year, afp_fwinfo.hour, afp_fwinfo.minute);
+
+			// Set Acquisition Mode
+			XDTUSB_DeviceSetAcquisitionMode(*ppdev, XDT_ACQ_MODE_SEQ);
+
+			return 0;
+		}
+		else
+		{
+			fprintf(stderr, "init_device failed: %s\n", XDTUSB_UtilErrorString(err));
+			return 1;
+		}
+	}
+	else
+	{
+		return 1;
+	}
+
+}
+
+int set_capture_settings(xdtusb_device_t* pdev, uint32_t exposure_us)
+{
+	// Configure Sequence
+	xdtusb_error_t err;
+	err = XDTUSB_DeviceSetSequenceModeParameters(
+		pdev, 
+		/*numFrames*/ 1, 
+		/*expTimeUs*/ exposure_us, 
+		/*numDummy*/ 0, 
+		/*expTimeDummy*/ 0
+	);
+	if (err != XDTUSB_ERROR_SUCCESS)
+	{
+		fprintf(stderr, "set_capture_settings failed: %s\n", XDTUSB_UtilErrorString(err));
+		return 1;
+	}
+	else
+	{
+		printf("Set capture settings successfully \n");
+		return 0;
+	}
+}
+
+int capture_frame(xdtusb_device_t* pdev)
+{
+	xdtusb_error_t err;
+
+	// Clear previous frame
+	g_frame_buffer.ready = false;
+
+	// Start Streaming mode
+	err = XDTUSB_DeviceStartStreaming(pdev, frame_cb, NULL);
+	if (err != XDTUSB_ERROR_SUCCESS)
+	{
+		fprintf(stderr, "DeviceStartStreaming failed: %s\n", XDTUSB_UtilErrorString(err));
+		return 1;
+	}
+
+	// Issue SW trigger
+	err = XDTUSB_DeviceIssueSwTrigger(pdev);
+	if (err != XDTUSB_ERROR_SUCCESS)
+	{
+		fprintf(stderr, "SoftwareTrigger failed: %s\n", XDTUSB_UtilErrorString(err));
+		return 1;
+	}
+
+	// Wait for frame with timeout
+	int timeout_ms = 20000;
+	while (!g_frame_buffer.ready && timeout_ms > 0) {
+		nanosleep(&(struct timespec){0, 10000000}, NULL);  // 10ms
+		timeout_ms -= 10;
+	}
+
+	if (!g_frame_buffer.ready) {
+		fprintf(stderr, "Timeout waiting for frame\n");
+		XDTUSB_DeviceStopStreaming(pdev);
+		return 1;
+	}
+
+	// Stop Streaming mode
+	err = XDTUSB_DeviceStopStreaming(pdev);
+	if (err != XDTUSB_ERROR_SUCCESS)
+	{
+		fprintf(stderr, "StopStreaming failed: %s\n", XDTUSB_UtilErrorString(err));
+		return 1;
+	}
+
+	printf("Captured frame successfully\n");
+	return 0;
+}
+
+int cleanup_capture_device(xdtusb_device_t* pdev)
+{
+	// Close device
+	xdtusb_error_t err;
+	err = XDTUSB_DeviceClose(pdev);
+	if (err != XDTUSB_ERROR_SUCCESS)
+	{
+		fprintf(stderr, "DeviceClose failed: %s\n", XDTUSB_UtilErrorString(err));
+		return 1;
+	}
+	else
+	{
+		printf("Cleaned up device successfully \n");
+		return 0;
+	}
+}
+
+int get_frame_data(uint8_t** data, uint32_t* size, uint32_t* width, uint32_t* height)
+{
+	printf("Getting frame data \n");
+
+	if (!g_frame_buffer.ready || g_frame_buffer.data == NULL) {
+        return 1;  // No frame available
     }
 
-    /* Initialize libxdtusb */
-    err = XDTUSB_Init();
-    if (err != XDTUSB_ERROR_SUCCESS) {
-        fprintf(stderr, "XDTUSB_Init failed: %s\n", XDTUSB_UtilErrorString(err));
-        return -3;
-    }
-
-    /* Poll for devices */
-    uint8_t numDevices;
-    xdtusb_device_t** devlist;
-    err = XDTUSB_PollDevices(&numDevices, &devlist);
-    if (err != XDTUSB_ERROR_SUCCESS) {
-        fprintf(stderr, "XDTUSB_PollDevices failed: %s\n", XDTUSB_UtilErrorString(err));
-        XDTUSB_Exit();
-        return -3;
-    }
-
-    if (numDevices == 0) {
-        fprintf(stderr, "No XDT devices found\n");
-        XDTUSB_Exit();
-        return -1;
-    }
-
-    /* Use first device found */
-    g_device = devlist[0];
-
-    /* Open device with 1 frame buffer (memory efficient) */
-    err = XDTUSB_DeviceOpen(g_device, 1);
-    if (err != XDTUSB_ERROR_SUCCESS) {
-        fprintf(stderr, "XDTUSB_DeviceOpen failed: %s\n", XDTUSB_UtilErrorString(err));
-        XDTUSB_Exit();
-        return -2;
-    }
-
-    /* Get device info */
-    xdtusb_device_info_t devinfo;
-    err = XDTUSB_DeviceGetInfo(g_device, &devinfo);
-    if (err == XDTUSB_ERROR_SUCCESS) {
-        fprintf(stdout, "Device opened: %s (Serial: %s)\n",
-                devinfo.platform_hwstr, devinfo.serialNumber);
-        fprintf(stdout, "USB: Bus %d, Port %d, Address %d, Speed: %s\n",
-                devinfo.usb_bus, devinfo.usb_prt, devinfo.usb_adr,
-                XDTUSB_UtilUsbSpeedString(devinfo.usb_spd));
-    }
-
-    /* Get maximum sensor dimensions for buffer pre-allocation */
-    uint32_t max_width, max_height;
-    err = XDTUSB_DeviceGetMaxDimensions(g_device, &max_width, &max_height);
-    if (err != XDTUSB_ERROR_SUCCESS) {
-        fprintf(stderr, "XDTUSB_DeviceGetMaxDimensions failed: %s\n", XDTUSB_UtilErrorString(err));
-        XDTUSB_DeviceClose(g_device);
-        XDTUSB_Exit();
-        return -6;
-    }
-
-    /* Pre-allocate frame buffer based on actual sensor dimensions */
-    g_frame_capacity = max_width * max_height * sizeof(xdtusb_pixel_t);
-    g_frame_data = (uint8_t*)malloc(g_frame_capacity);
-    if (g_frame_data == NULL) {
-        fprintf(stderr, "Error: Failed to allocate %zu bytes for frame buffer\n", g_frame_capacity);
-        XDTUSB_DeviceClose(g_device);
-        XDTUSB_Exit();
-        return -7;
-    }
-
-    fprintf(stdout, "Pre-allocated frame buffer: %zu bytes (%ux%u max)\n",
-            g_frame_capacity, max_width, max_height);
-
-    g_initialized = 1;
-    fprintf(stdout, "Capture device initialized successfully\n");
+    *data = g_frame_buffer.data;
+    *size = g_frame_buffer.size;
+    *width = g_frame_buffer.width;
+    *height = g_frame_buffer.height;
+    
     return 0;
 }
 
-int capture_frame(uint32_t exposure_ms)
+void clear_frame_data()
 {
-    xdtusb_error_t err;
-    struct timespec timeout;
-    int ret;
-
-    if (!g_initialized || g_device == NULL) {
-        fprintf(stderr, "Device not initialized\n");
-        return -1;
+    if (g_frame_buffer.data != NULL) {
+        free(g_frame_buffer.data);
+        g_frame_buffer.data = NULL;
     }
-
-    /* Validate exposure time */
-    if (exposure_ms < 10 || exposure_ms > 10000) {
-        fprintf(stderr, "Exposure time must be between 10 and 10000 ms\n");
-        return -2;
-    }
-
-    pthread_mutex_lock(&g_capture_mutex);
-    g_frame_ready = 0;
-    pthread_mutex_unlock(&g_capture_mutex);
-
-    /* Configure for single frame sequence capture */
-    /* Using sequence mode with 1 frame, triggered by software */
-    uint32_t exposure_us = exposure_ms * 1000;
-
-    err = XDTUSB_DeviceSetSequenceModeParameters(g_device,
-        /*numFrames*/ 1,
-        /*expTimeUs*/ exposure_us,
-        /*numSkp*/ 0,
-        /*skpTimeUs*/ 0);
-
-    if (err != XDTUSB_ERROR_SUCCESS) {
-        fprintf(stderr, "XDTUSB_DeviceSetSequenceModeParameters failed: %s\n",
-                XDTUSB_UtilErrorString(err));
-        return -2;
-    }
-
-    /* Set acquisition mode to software-triggered sequence */
-    err = XDTUSB_DeviceSetAcquisitionMode(g_device, XDT_ACQ_MODE_SEQ);
-    if (err != XDTUSB_ERROR_SUCCESS) {
-        fprintf(stderr, "XDTUSB_DeviceSetAcquisitionMode failed: %s\n",
-                XDTUSB_UtilErrorString(err));
-        return -2;
-    }
-
-    /* Start streaming with frame callback */
-    err = XDTUSB_DeviceStartStreaming(g_device, frame_callback, NULL);
-    if (err != XDTUSB_ERROR_SUCCESS) {
-        fprintf(stderr, "XDTUSB_DeviceStartStreaming failed: %s\n",
-                XDTUSB_UtilErrorString(err));
-        return -4;
-    }
-
-    /* Issue software trigger to start capture */
-    err = XDTUSB_DeviceIssueSwTrigger(g_device);
-    if (err != XDTUSB_ERROR_SUCCESS) {
-        fprintf(stderr, "XDTUSB_DeviceIssueSwTrigger failed: %s\n",
-                XDTUSB_UtilErrorString(err));
-        XDTUSB_DeviceStopStreaming(g_device);
-        return -5;
-    }
-
-    /* Wait for frame with timeout (exposure_time + 10 seconds) */
-    clock_gettime(CLOCK_REALTIME, &timeout);
-    timeout.tv_sec += (exposure_ms / 1000) + 10;
-    timeout.tv_nsec += (exposure_ms % 1000) * 1000000;
-    if (timeout.tv_nsec >= 1000000000) {
-        timeout.tv_sec += 1;
-        timeout.tv_nsec -= 1000000000;
-    }
-
-    pthread_mutex_lock(&g_capture_mutex);
-    while (!g_frame_ready) {
-        ret = pthread_cond_timedwait(&g_capture_cond, &g_capture_mutex, &timeout);
-        if (ret == ETIMEDOUT) {
-            pthread_mutex_unlock(&g_capture_mutex);
-            fprintf(stderr, "Capture timeout after %u ms\n", exposure_ms + 10000);
-            XDTUSB_DeviceStopStreaming(g_device);
-            return -3;
-        }
-    }
-    pthread_mutex_unlock(&g_capture_mutex);
-
-    /* Stop streaming */
-    err = XDTUSB_DeviceStopStreaming(g_device);
-    if (err != XDTUSB_ERROR_SUCCESS) {
-        fprintf(stderr, "Warning: XDTUSB_DeviceStopStreaming failed: %s\n",
-                XDTUSB_UtilErrorString(err));
-    }
-
-    fprintf(stdout, "Frame captured: %ux%u, %zu bytes, exposure: %u ms\n",
-            g_frame_width, g_frame_height, g_frame_size, exposure_ms);
-
-    return 0;
+    g_frame_buffer.ready = false;
+    g_frame_buffer.size = 0;
 }
 
-void get_frame_data(uint32_t* width, uint32_t* height, uint32_t* pixel_size,
-                    uint8_t** data, size_t* size)
-{
-    pthread_mutex_lock(&g_capture_mutex);
+int main()
+{	
+	int err;
 
-    if (width) *width = g_frame_width;
-    if (height) *height = g_frame_height;
-    if (pixel_size) *pixel_size = g_pixel_size;
-    if (data) *data = g_frame_data;
-    if (size) *size = g_frame_size;
+	// Initialise  the device
+	xdtusb_device_t* pdev;
+	err = init_device(&pdev);
+	if (err != 0)
+	{
+		XDTUSB_Exit();
+		exit(EXIT_FAILURE);
+	}
 
-    pthread_mutex_unlock(&g_capture_mutex);
+	// Configure capture settings 
+	uint32_t exposure_us = 100000;
+	err = set_capture_settings(pdev, exposure_us);
+	if (err != 0)
+	{
+		XDTUSB_Exit();
+		exit(EXIT_FAILURE);
+	}
+
+	// Capture frame
+	err = capture_frame(pdev);
+	if (err != 0)
+	{
+		XDTUSB_Exit();
+		exit(EXIT_FAILURE);
+	}
+
+	// Get frame data and verify it worked
+	uint8_t* data;
+	uint32_t size;
+	uint32_t width;
+	uint32_t height;
+	err = get_frame_data(&data, &size, &width, &height);
+	if (err != 0)
+	{
+		fprintf(stderr, "Failed to get frame data\n");
+		XDTUSB_Exit();
+		exit(EXIT_FAILURE);
+	}
+
+	// Print frame info to verify
+	printf("\n=== Frame Data Retrieved ===\n");
+	printf("Size: %u bytes\n", size);
+	printf("Dimensions: %u x %u\n", width, height);
+	printf("First 10 pixels: ");
+	uint16_t* pixels = (uint16_t*)data;
+	for (int i = 0; i < 10 && i < (int)(size/2); i++) {
+		printf("%04x ", pixels[i]);
+	}
+	printf("\n============================\n");
+
+	// Close device
+	err = cleanup_capture_device(pdev);
+	if (err != 0)
+	{
+		XDTUSB_Exit();
+		exit(EXIT_FAILURE);
+	}
+
+	// Clean up frame buffer
+	clear_frame_data();
+
+	XDTUSB_Exit();
+
+	exit(EXIT_SUCCESS);
 }
 
-void cleanup_capture_device(void)
-{
-    if (!g_initialized) {
-        return;
-    }
 
-    /* Stop streaming if still active */
-    if (g_device) {
-        XDTUSB_DeviceStopStreaming(g_device);
-        XDTUSB_DeviceClose(g_device);
-        g_device = NULL;
-    }
 
-    /* Free frame buffer */
-    if (g_frame_data) {
-        free(g_frame_data);
-        g_frame_data = NULL;
-    }
+/* EOF */
 
-    /* Exit libxdtusb */
-    XDTUSB_Exit();
 
-    g_initialized = 0;
-    fprintf(stdout, "Capture device cleaned up\n");
-}
+
+

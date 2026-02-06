@@ -10,6 +10,7 @@ import argparse
 import requests
 import numpy as np
 from pathlib import Path
+from PIL import Image
 
 
 def test_init(base_url):
@@ -98,13 +99,13 @@ def test_led_off(base_url):
         return False
 
 
-def test_capture(base_url, exposure_ms, output_file=None):
+def test_capture(base_url, exposure_ms, led_val, output_file=None):
     """Test capture endpoint."""
-    print(f"Testing /capture endpoint (exposure: {exposure_ms}ms)...")
+    print(f"Testing /capture endpoint (exposure: {exposure_ms}ms, led_val: {led_val})...")
     try:
         response = requests.post(
             f"{base_url}/capture",
-            json={"exposure_ms": exposure_ms},
+            json={"exposure_ms": exposure_ms, "led": led_val},
             timeout=exposure_ms/1000 + 30  # exposure + 30s buffer
         )
 
@@ -117,6 +118,7 @@ def test_capture(base_url, exposure_ms, output_file=None):
             print(f"  ✓ Capture successful:")
             print(f"    Resolution: {width}x{height}")
             print(f"    Exposure: {exposure}ms")
+            print(f"    Led value: {led_val}")
             print(f"    Data size: {len(response.content)} bytes")
 
             # Verify data size (assuming uint16 pixels)
@@ -136,6 +138,8 @@ def test_capture(base_url, exposure_ms, output_file=None):
                 try:
                     image = np.frombuffer(response.content, dtype=np.uint16)
                     image = image.reshape((height, width))
+
+                    Image.fromarray(image).save('test.tiff')
                     print(f"    Statistics:")
                     print(f"      Min: {image.min()}")
                     print(f"      Max: {image.max()}")
@@ -269,6 +273,12 @@ Examples:
         help='Exposure time in ms (default: 100)'
     )
     parser.add_argument(
+        '--led',
+        type=float,
+        default=0.01,
+        help='LED value (default: 0.01)'
+    )
+    parser.add_argument(
         '--output',
         help='Save captured image to file (e.g., capture.raw)'
     )
@@ -309,7 +319,7 @@ Examples:
         elif args.test == 'led_off':
             success = test_led_off(base_url)
         elif args.test == 'capture':
-            success = test_capture(base_url, args.exposure, args.output)
+            success = test_capture(base_url, args.exposure, args.led, args.output)
         elif args.test == 'shutdown':
             success = test_shutdown(base_url)
 
@@ -339,7 +349,7 @@ Examples:
         print()
 
         print("[4/6] Capturing frame...")
-        test_capture(base_url, args.exposure, args.output or "test_frame.raw")
+        test_capture(base_url, args.exposure, args.led, args.output or "test_frame.raw")
         print()
 
         print("[5/6] Testing LED off...")
@@ -370,7 +380,7 @@ Examples:
     print()
 
     # Test capture
-    success = test_capture(base_url, args.exposure, args.output)
+    success = test_capture(base_url, args.exposure, args.led, args.output)
 
     if args.test_errors:
         print()

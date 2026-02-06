@@ -2,3 +2,4 @@
 # Minimal set for Pi Zero 2W resource constraints
 
 flask>=2.0.0
+numpy
