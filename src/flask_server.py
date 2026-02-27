@@ -44,6 +44,9 @@ device = None
 # Global LED (set in main, used in capture endpoint)
 led = None
 
+# Global shutdown button (must persist to avoid garbage collection)
+shutdown_btn = None
+
 @app.route('/init', methods=['POST'])
 def init():
     """
@@ -199,7 +202,7 @@ def signal_handler(sig, frame):
 
 def main():
     """Main entry point."""
-    global led
+    global led, shutdown_btn
 
     # Register signal handlers
     signal.signal(signal.SIGINT, signal_handler)
@@ -225,7 +228,7 @@ def main():
         subprocess.run(['shutdown', 'now'])
 
     try:
-        ShutdownButton(pin=3, hold_time=3.0, on_held=do_shutdown)
+        shutdown_btn = ShutdownButton(pin=3, hold_time=3.0, on_held=do_shutdown)
     except Exception as e:
         logger.error(f"Failed to initialise shutdown button: {e}")
 
