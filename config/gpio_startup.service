@@ -1,13 +1,12 @@
 [Unit]
 Description=GPIO Startup LED Flash
-Before=capture.service
+After=local-fs.target
 
 [Service]
-Type=oneshot
+Type=simple
 User=root
 WorkingDirectory=/home/sl/sl-wb-pi-api
 ExecStart=/home/sl/sl-wb-pi-api/.venv/bin/python3 -m gpio.startup_flash
-RemainAfterExit=no
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=sysinit.target

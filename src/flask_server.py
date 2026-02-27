@@ -6,12 +6,15 @@ Provides HTTP interface for laptop to request camera captures via C library.
 Optimized for Pi Zero 2W with minimal resource usage.
 """
 
+import os
 import sys
 import logging
 import signal
 import subprocess
 import time
 import gzip
+
+READY_FILE = '/tmp/capture_ready'
 
 from flask import Flask, request, jsonify, Response
 
@@ -197,6 +200,7 @@ def signal_handler(sig, frame):
     if led is not None:
         led.off()
         led.close()
+    os.path.exists(READY_FILE) and os.remove(READY_FILE)
     sys.exit(0)
 
 
@@ -243,6 +247,9 @@ def main():
 
         if led is not None:
             led.solid_green()
+
+        # Signal startup_flash.py that the API is ready
+        open(READY_FILE, 'w').close()
 
         app.run(
             host='0.0.0.0',
