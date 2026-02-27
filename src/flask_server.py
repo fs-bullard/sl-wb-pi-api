@@ -11,6 +11,7 @@ import sys
 import logging
 import signal
 import subprocess
+import threading
 import time
 import gzip
 
@@ -186,12 +187,22 @@ def shutdown():
         'message': 'Device shutdown complete'
     }), 200
 
+def _do_shutdown():
+    """Flash red then shut down the Pi — shared by button hold and /power_off."""
+    logger.info("Shutting down Pi...")
+    if led is not None:
+        led.flash_red()
+    time.sleep(2)
+    subprocess.run(['shutdown', 'now'])
+
+
 @app.route('/power_off', methods=['POST'])
 def power_off():
     """
     Safely power off the Pi
     """
-    subprocess.run(['shutdown', 'now'])
+    threading.Thread(target=_do_shutdown, daemon=True).start()
+    return jsonify({'status': 'success', 'message': 'Shutting down'}), 200
 
 
 def signal_handler(sig, frame):
@@ -224,15 +235,8 @@ def main():
         led = None
 
     # Arm shutdown button — held for 3s triggers system shutdown
-    def do_shutdown():
-        logger.info("Shutdown button held — shutting down")
-        if led is not None:
-            led.flash_red()
-        time.sleep(2)
-        subprocess.run(['shutdown', 'now'])
-
     try:
-        shutdown_btn = ShutdownButton(pin=3, hold_time=3.0, on_held=do_shutdown)
+        shutdown_btn = ShutdownButton(pin=3, hold_time=3.0, on_held=_do_shutdown)
     except Exception as e:
         logger.error(f"Failed to initialise shutdown button: {e}")
 
