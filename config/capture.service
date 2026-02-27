@@ -7,7 +7,7 @@ Type=simple
 # Run as root to access USB device (no udev rules needed)
 User=root
 WorkingDirectory=/home/sl/sl-wb-pi-api/src
-ExecStart=/home/sl/sl-wb-pi-api/.venv/bin/python3 flask_server.py
+ExecStart=/home/sl/sl-wb-pi-api/.venv/bin/python3 -m flask_server
 Restart=on-failure
 RestartSec=5s
 Environment="FLASK_ENV=production"
