@@ -5,8 +5,8 @@ Before=capture.service
 [Service]
 Type=oneshot
 User=root
-WorkingDirectory=/home/raspberrypi/sl-wb-pi-api
-ExecStart=/home/raspberrypi/sl-wb-pi-api/venv/bin/python3 -m gpio.startup_flash
+WorkingDirectory=/home/sl/sl-wb-pi-api
+ExecStart=/home/sl/sl-wb-pi-api/.venv/bin/python3 -m gpio.startup_flash
 RemainAfterExit=no
 
 [Install]
