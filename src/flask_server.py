@@ -6,16 +6,17 @@ Provides HTTP interface for laptop to request camera captures via C library.
 Optimized for Pi Zero 2W with minimal resource usage.
 """
 
-import os
 import sys
 import logging
 import signal
+import subprocess
+import time
 import gzip
 
 from flask import Flask, request, jsonify, Response
 
-from gpio.led_pwm import LED
-from gpio.button_pwm import ButtonLED
+from gpio.rgb_led import RGBLED
+from gpio.shutdown_button import ShutdownButton
 
 from src.capture_wrapper import Device, DeviceError
 
@@ -29,9 +30,6 @@ logger = logging.getLogger(__name__)
 # Flask app (single-threaded for Pi Zero resource constraints)
 app = Flask(__name__)
 
-# Global C library handle
-libcapture = None
-
 # Constants
 EXPOSURE_MIN = 10
 EXPOSURE_MAX = 10000
@@ -40,8 +38,11 @@ DEFAULT_EXPOSURE = 100
 # Global initialised flag
 initialised = False
 
-# Global device 
+# Global device
 device = None
+
+# Global LED (set in main, used in capture endpoint)
+led = None
 
 @app.route('/init', methods=['POST'])
 def init():
@@ -55,16 +56,6 @@ def init():
     global initialised
 
     device = Device()
-
-    # GPIO devices
-    try:
-        led = LED(22)
-        # button_led = ButtonLED(15, 16)
-    except Exception as e:
-        logger.error(f"Error connecting to GPIO devices: {e}")
-        led = None
-        button_led = None
-
     initialised = True
 
     return jsonify({
@@ -124,20 +115,11 @@ def capture():
             'message': f'exposure_ms must be between {EXPOSURE_MIN} and {EXPOSURE_MAX}'
         }), 400
     
-    # # Apply LED setting
-    # global led
-    # if led_val is None:
-    #     pass
-    # elif isinstance(led_val, (float)) and 0 <= led_val <= 1:
-    #     led.set_on(True, led_val)
-    # else:
-    #     return jsonify({
-    #         'status': 'error',
-    #         'message': f'led_val must be between {0} and {1}'
-    #     }), 400
-    
     # Capture frame
     logger.info(f"Capturing frame with exposure: {exposure_ms} ms")
+
+    if led is not None:
+        led.flash_blue()
 
     try:
         data = device.capture_frame(exposure_ms)
@@ -148,8 +130,9 @@ def capture():
             'status': 'error',
             'message': f'C library error: {str(e)}'
         }), 500
-    # finally:
-    #     led.set_on(False)
+    finally:
+        if led is not None:
+            led.solid_green()
 
     # Copy frame data to Python bytes and compress
     try:
@@ -202,18 +185,21 @@ def power_off():
     """
     Safely power off the Pi
     """
-    os.system('sudo shutdown now')
+    subprocess.run(['shutdown', 'now'])
 
 
 def signal_handler(sig, frame):
     """Handle shutdown signals gracefully."""
     logger.info(f"Received signal {sig}, shutting down...")
-
+    if led is not None:
+        led.off()
+        led.close()
     sys.exit(0)
 
 
 def main():
     """Main entry point."""
+    global led
 
     # Register signal handlers
     signal.signal(signal.SIGINT, signal_handler)
@@ -223,6 +209,26 @@ def main():
     logger.info("Western Blot Capture API Server")
     logger.info("=" * 60)
 
+    # Initialise RGB LED
+    try:
+        led = RGBLED(r_pin=17, g_pin=27, b_pin=22)
+    except Exception as e:
+        logger.error(f"Failed to initialise RGB LED: {e}")
+        led = None
+
+    # Arm shutdown button — held for 3s triggers system shutdown
+    def do_shutdown():
+        logger.info("Shutdown button held — shutting down")
+        if led is not None:
+            led.flash_red()
+        time.sleep(2)
+        subprocess.run(['shutdown', 'now'])
+
+    try:
+        ShutdownButton(pin=3, hold_time=3.0, on_held=do_shutdown)
+    except Exception as e:
+        logger.error(f"Failed to initialise shutdown button: {e}")
+
     try:
 
         # Start Flask server (single-threaded for Pi Zero)
@@ -231,6 +237,9 @@ def main():
         logger.info("  POST /capture  - Capture image")
         logger.info("  POST /shutdown - Shutdown device")
         logger.info("=" * 60)
+
+        if led is not None:
+            led.solid_green()
 
         app.run(
             host='0.0.0.0',
