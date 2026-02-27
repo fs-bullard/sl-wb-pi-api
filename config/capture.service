@@ -6,8 +6,8 @@ After=network.target gpio_startup.service
 Type=simple
 # Run as root to access USB device (no udev rules needed)
 User=root
-WorkingDirectory=/home/sl/sl-wb-pi-api/src
-ExecStart=/home/sl/sl-wb-pi-api/venv/bin/python3 flask_server.py
+WorkingDirectory=/home/raspberrypi/sl-wb-pi-api/src
+ExecStart=/home/raspberrypi/sl-wb-pi-api/venv/bin/python3 flask_server.py
 Restart=on-failure
 RestartSec=5s
 Environment="FLASK_ENV=production"
