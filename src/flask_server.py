@@ -230,6 +230,7 @@ def main():
     # Initialise RGB LED
     try:
         led = RGBLED(r_pin=17, g_pin=27, b_pin=22)
+        logger.debug('Initialised RGB LED')
     except Exception as e:
         logger.error(f"Failed to initialise RGB LED: {e}")
         led = None
