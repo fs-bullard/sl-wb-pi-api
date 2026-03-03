@@ -249,11 +249,13 @@ def main():
         logger.info("  POST /shutdown - Shutdown device")
         logger.info("=" * 60)
 
+        # Signal startup_flash.py that the API is ready and wait briefly
+        # for it to release the GPIO pins before we take control
+        open(READY_FILE, 'w').close()
+        time.sleep(0.5)
+
         if led is not None:
             led.solid_green()
-
-        # Signal startup_flash.py that the API is ready
-        open(READY_FILE, 'w').close()
 
         app.run(
             host='0.0.0.0',
