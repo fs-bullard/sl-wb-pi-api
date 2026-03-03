@@ -249,7 +249,7 @@ def main():
         # confirming it has released the GPIO pins before we claim them
         open(READY_FILE, 'w').close()
         while os.path.exists(READY_FILE):
-            time.sleep(10)
+            time.sleep(1)
 
         # Initialise RGB LED now that pins are free
         try:
