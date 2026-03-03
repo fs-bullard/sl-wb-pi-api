@@ -23,3 +23,7 @@ try:
 finally:
     led.off()
     led.close()
+    try:
+        os.remove(READY_FILE)
+    except OSError:
+        pass

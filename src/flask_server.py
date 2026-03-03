@@ -211,7 +211,10 @@ def signal_handler(sig, frame):
     if led is not None:
         led.off()
         led.close()
-    os.path.exists(READY_FILE) and os.remove(READY_FILE)
+    try:
+        os.remove(READY_FILE)
+    except FileNotFoundError:
+        pass
     sys.exit(0)
 
 
@@ -226,14 +229,6 @@ def main():
     logger.info("=" * 60)
     logger.info("Western Blot Capture API Server")
     logger.info("=" * 60)
-
-    # Initialise RGB LED
-    try:
-        led = RGBLED(r_pin=17, g_pin=27, b_pin=22)
-        logger.debug('Initialised RGB LED')
-    except Exception as e:
-        logger.error(f"Failed to initialise RGB LED: {e}")
-        led = None
 
     # Arm shutdown button — held for 3s triggers system shutdown
     try:
@@ -250,13 +245,19 @@ def main():
         logger.info("  POST /shutdown - Shutdown device")
         logger.info("=" * 60)
 
-        # Signal startup_flash.py that the API is ready and wait briefly
-        # for it to release the GPIO pins before we take control
+        # Signal startup_flash.py to stop and wait for it to delete the file,
+        # confirming it has released the GPIO pins before we claim them
         open(READY_FILE, 'w').close()
-        time.sleep(0.5)
+        while os.path.exists(READY_FILE):
+            time.sleep(0.1)
 
-        if led is not None:
+        # Initialise RGB LED now that pins are free
+        try:
+            led = RGBLED(r_pin=17, g_pin=27, b_pin=22)
             led.solid_green()
+        except Exception as e:
+            logger.error(f"Failed to initialise RGB LED: {e}")
+            led = None
 
         app.run(
             host='0.0.0.0',
