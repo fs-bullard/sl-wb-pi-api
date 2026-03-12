@@ -1,4 +1,6 @@
+#include <errno.h>
 #include <string.h>
+#include <time.h>
 
 #include <pthread.h>
 
@@ -120,23 +122,41 @@ int capture_frame(
     err = XDTUSB_DeviceStartStreaming(handle, (xdtusb_frame_cb_t)callback, &callback_data);
 	if (err != XDTUSB_ERROR_SUCCESS)
 	{
+        pthread_mutex_destroy(&mutex);
+        pthread_cond_destroy(&cond);
 		return 1;
 	}
     
     // Issue SW trigger
     err = XDTUSB_DeviceIssueSwTrigger(handle);
     if (err != XDTUSB_ERROR_SUCCESS) {
+        XDTUSB_DeviceStopStreaming(handle);
+        pthread_mutex_destroy(&mutex);
+        pthread_cond_destroy(&cond);
         return 1;
     }
 
-    // Wait for frame TODO: add timeout (max wait time)
+    // Build absolute timeout: exposure time + 5s headroom
+    struct timespec timeout;
+    clock_gettime(CLOCK_REALTIME, &timeout);
+    long timeout_ms = (long)exposure_ms + 5000;
+    timeout.tv_sec  += timeout_ms / 1000;
+    timeout.tv_nsec += (timeout_ms % 1000) * 1000000L;
+    if (timeout.tv_nsec >= 1000000000L) {
+        timeout.tv_sec++;
+        timeout.tv_nsec -= 1000000000L;
+    }
+
     pthread_mutex_lock(&mutex);
-    pthread_cond_wait(&cond, &mutex);
+    int wait_result = pthread_cond_timedwait(&cond, &mutex, &timeout);
     pthread_mutex_unlock(&mutex);
-    
-    // Stop streaming
-    err = XDTUSB_DeviceStopStreaming(handle);
-    if (err != XDTUSB_ERROR_SUCCESS) {
+
+    pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&cond);
+
+    XDTUSB_DeviceStopStreaming(handle);
+
+    if (wait_result == ETIMEDOUT) {
         return 1;
     }
 
