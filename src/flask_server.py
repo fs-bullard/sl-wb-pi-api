@@ -22,7 +22,7 @@ from flask import Flask, request, jsonify, Response
 from gpio.rgb_led import RGBLED
 from gpio.shutdown_button import ShutdownButton
 
-from src.capture_wrapper import Device, DeviceError
+from src.capture_wrapper import Device, DeviceError, DroppedFrame
 
 # Configure logging
 logging.basicConfig(
@@ -50,6 +50,9 @@ led = None
 
 # Global shutdown button (must persist to avoid garbage collection)
 shutdown_btn = None
+
+# Set to True when button hold triggers system shutdown
+shutdown_pending = False
 
 @app.route('/init', methods=['POST'])
 def init():
@@ -131,11 +134,15 @@ def capture():
     try:
         data = device.capture_frame(exposure_ms)
         logger.info(f"capture_frame returned")
+    except DroppedFrame:
+        # Frame dropped, try capture once more
+        data = device.capture_frame(exposure_ms)
+        logger.info(f"capture_frame returned")
     except Exception as e:
         logger.error(f"Exception in capture_frame: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
-            'message': f'C library error: {str(e)}'
+            'message': f'Failed to capture frame: {str(e)}'
         }), 500
     finally:
         if led is not None:
@@ -189,11 +196,21 @@ def shutdown():
 
 def _do_shutdown():
     """Flash red then shut down the Pi — shared by button hold and /power_off."""
+    global shutdown_pending
+    shutdown_pending = True
     logger.info("Shutting down Pi...")
     if led is not None:
         led.flash_red()
     time.sleep(2)
     subprocess.run(['shutdown', 'now'])
+
+
+@app.route('/status', methods=['GET'])
+def status():
+    """Returns current server status, including whether a shutdown is pending."""
+    return jsonify({
+        'status': 'shutting_down' if shutdown_pending else 'ok'
+    }), 200
 
 
 @app.route('/power_off', methods=['POST'])
