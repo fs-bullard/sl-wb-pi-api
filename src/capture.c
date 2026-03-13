@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 
 #include <pthread.h>
 
@@ -158,10 +159,10 @@ int capture_frame(
     }
     LOG_INFO("SW trigger issued, waiting for frame");
 
-    // Build absolute timeout: exposure time + 5s headroom
+    // Build absolute timeout: exposure time + 50ms headroom
     struct timespec timeout;
     clock_gettime(CLOCK_REALTIME, &timeout);
-    long timeout_ms = (long)exposure_ms + 5000;
+    long timeout_ms = (long)(exposure_ms + fmax(1.5 * exposure_ms, 1000.0));
     timeout.tv_sec  += timeout_ms / 1000;
     timeout.tv_nsec += (timeout_ms % 1000) * 1000000L;
     if (timeout.tv_nsec >= 1000000000L) {
@@ -180,7 +181,7 @@ int capture_frame(
 
     if (wait_result == ETIMEDOUT) {
         LOG_ERROR("timed out waiting for frame (timeout=%ld ms)", timeout_ms);
-        return 1;
+        return 2;
     }
 
     LOG_INFO("frame captured successfully");
@@ -192,6 +193,7 @@ void callback(
     xdtusb_framebuf_t* frame_buffer,
     callback_data* callback_data
 ){
+    LOG_INFO("callback triggered");
     xdtusb_frame_dimensions_t* frame_dimensions;
 	xdtusb_error_t err = XDTUSB_FramebufGetDimensions(frame_buffer, &frame_dimensions);
     
