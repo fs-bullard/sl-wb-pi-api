@@ -1,10 +1,14 @@
 #include <errno.h>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 
 #include <pthread.h>
 
 #include "capture.h"
+
+#define LOG_INFO(fmt, ...)  fprintf(stderr, "[capture] INFO  " fmt "\n", ##__VA_ARGS__)
+#define LOG_ERROR(fmt, ...) fprintf(stderr, "[capture] ERROR " fmt "\n", ##__VA_ARGS__)
 
 #define WIDTH_ADDRESS 69
 #define HEIGHT_ADDRESS 68
@@ -25,7 +29,7 @@ static void callback(
 int open_device(xdtusb_device_t** handle){
     // Initialize libxdtusb
 	XDTUSB_Init();
-	
+
 	// Poll devices
 	uint8_t num_devices;
 	xdtusb_device_t** device_list;
@@ -34,16 +38,24 @@ int open_device(xdtusb_device_t** handle){
 	// If XDTUSB devices were found
 	if (num_devices == 0)
     {
+        LOG_ERROR("no XDTUSB devices found");
         return 1;
     }
-	
+    LOG_INFO("found %d device(s), using first", num_devices);
+
     // Use first device found
     *handle = device_list[0];
 
     // Open device
     xdtusb_error_t err = XDTUSB_DeviceOpen(*handle, 1);
 
-    return err != XDTUSB_ERROR_SUCCESS;
+    if (err != XDTUSB_ERROR_SUCCESS) {
+        LOG_ERROR("XDTUSB_DeviceOpen failed (err=%d)", err);
+        return 1;
+    }
+
+    LOG_INFO("device opened successfully");
+    return 0;
 }
 
 void close_device(xdtusb_device_t* handle){
@@ -90,10 +102,14 @@ int capture_frame(
     uint16_t* buffer,
     uint32_t length
 ){
+    LOG_INFO("capturing frame: exposure=%u ms, buffer_length=%u", exposure_ms, length);
+
     xdtusb_error_t err = XDTUSB_DeviceSetAcquisitionMode(handle, XDT_ACQ_MODE_SEQ);
     if (err != XDTUSB_ERROR_SUCCESS) {
+        LOG_ERROR("XDTUSB_DeviceSetAcquisitionMode failed (err=%d)", err);
         return 1;
     }
+    LOG_INFO("Set acquisition mode");
 
     err = XDTUSB_DeviceSetSequenceModeParameters(
         handle,
@@ -103,9 +119,11 @@ int capture_frame(
         0
     );
     if (err != XDTUSB_ERROR_SUCCESS) {
+        LOG_ERROR("XDTUSB_DeviceSetSequenceModeParameters failed (err=%d)", err);
         return 1;
     }
-    
+    LOG_INFO("Set Sequence mode parameters");
+
     pthread_mutex_t mutex;
     pthread_cond_t cond;
 
@@ -122,19 +140,23 @@ int capture_frame(
     err = XDTUSB_DeviceStartStreaming(handle, (xdtusb_frame_cb_t)callback, &callback_data);
 	if (err != XDTUSB_ERROR_SUCCESS)
 	{
+        LOG_ERROR("XDTUSB_DeviceStartStreaming failed (err=%d)", err);
         pthread_mutex_destroy(&mutex);
         pthread_cond_destroy(&cond);
 		return 1;
 	}
-    
+    LOG_INFO("Started streaming");
+
     // Issue SW trigger
     err = XDTUSB_DeviceIssueSwTrigger(handle);
     if (err != XDTUSB_ERROR_SUCCESS) {
+        LOG_ERROR("XDTUSB_DeviceIssueSwTrigger failed (err=%d)", err);
         XDTUSB_DeviceStopStreaming(handle);
         pthread_mutex_destroy(&mutex);
         pthread_cond_destroy(&cond);
         return 1;
     }
+    LOG_INFO("SW trigger issued, waiting for frame");
 
     // Build absolute timeout: exposure time + 5s headroom
     struct timespec timeout;
@@ -157,9 +179,11 @@ int capture_frame(
     XDTUSB_DeviceStopStreaming(handle);
 
     if (wait_result == ETIMEDOUT) {
+        LOG_ERROR("timed out waiting for frame (timeout=%ld ms)", timeout_ms);
         return 1;
     }
 
+    LOG_INFO("frame captured successfully");
     return 0;
 }   
 
@@ -172,16 +196,24 @@ void callback(
 	xdtusb_error_t err = XDTUSB_FramebufGetDimensions(frame_buffer, &frame_dimensions);
     
     if (err == XDTUSB_ERROR_SUCCESS) {
+        LOG_INFO("frame dims: %ux%u", frame_dimensions->width, frame_dimensions->height);
         xdtusb_pixel_t* temp_frame_data;
         err = XDTUSB_FramebufGetData(frame_buffer, &temp_frame_data);
 
         if (err == XDTUSB_ERROR_SUCCESS) {
-            if (callback_data->length >= frame_dimensions->width * frame_dimensions->height) {
+            uint32_t frame_pixels = frame_dimensions->width * frame_dimensions->height;
+            if (callback_data->length >= frame_pixels) {
                 pthread_mutex_lock(callback_data->mutex);
                 memcpy(callback_data->buffer, temp_frame_data, callback_data->length * sizeof(uint16_t));
                 pthread_mutex_unlock(callback_data->mutex);
+            } else {
+                LOG_ERROR("buffer too small: need %u pixels, have %u", frame_pixels, callback_data->length);
             }
+        } else {
+            LOG_ERROR("XDTUSB_FramebufGetData failed (err=%d)", err);
         }
+    } else {
+        LOG_ERROR("XDTUSB_FramebufGetDimensions failed (err=%d)", err);
     }
 
     pthread_cond_broadcast(callback_data->cond);
