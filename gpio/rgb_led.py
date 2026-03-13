@@ -39,12 +39,10 @@ class RGBLED:
         self.b.off()
         self.r.blink(on_time=on_time, off_time=off_time)
 
-    def flash_blue(self, on_time: float = 0.1, off_time: float = 0.1):
-        """Non-blocking blue blink."""
-        print('Flashing blue')
+    def solid_blue(self):
         self.r.off()
         self.g.off()
-        self.b.blink(on_time=on_time, off_time=off_time)
+        self.b.on()
 
     def off(self):
         self.r.off()

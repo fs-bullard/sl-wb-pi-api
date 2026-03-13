@@ -126,7 +126,7 @@ def capture():
     logger.info(f"Capturing frame with exposure: {exposure_ms} ms")
 
     if led is not None:
-        led.flash_blue()
+        led.solid_blue()
 
     try:
         data = device.capture_frame(exposure_ms)
