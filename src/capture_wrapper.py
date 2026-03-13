@@ -64,6 +64,9 @@ _libcapture.capture_frame.argtypes = [
 class DeviceError(Exception):
     """Represents an error in the capture device"""
 
+class DroppedFrame(Exception):
+    """Represents a dropped frame in the capture device"""
+
 class Device:
     def __init__(self):
         # Device pointer
@@ -118,7 +121,9 @@ class Device:
             frame_buffer_ptr,
             frame_buffer.size
         )
-        self._check_error(err)
+        if err == 2: 
+            # Frame dropped, try and capture again
+            raise DroppedFrame('Frame dropped')
 
         logger.info('Frame captured')
 
