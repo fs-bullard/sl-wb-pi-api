@@ -65,6 +65,9 @@ def init():
     global device
     global initialised
 
+    if initialised is not None and device is not None:
+        device.close_device()
+
     device = Device()
     initialised = True
 
